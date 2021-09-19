@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import os
 from matplotlib import pyplot as plt
+import glob
+from parse import parse
 
 
 class Interferogram:
@@ -50,12 +52,6 @@ class Interferogram:
         self.freq = freq
         self.ft = ft
 
-        fullpath = os.path.join(self.pathtodata, self.filetoread)
-        if self.time is None and os.path.exists(fullpath):
-            self.read_data()
-        else:
-            raise ValueError("The path {} is {} ".format(fullpath, os.path.exists(fullpath)))
-
     def read_data(self):
         """
         reads an intensity vs. time data saved in two tabulated columns
@@ -88,13 +84,13 @@ class Interferogram:
         else:
             raise ValueError("File path does not exist! Please enter a valid path")
 
-    def display(self, by_wavelength=False, temporal_data = True, wav_min=400, wav_max=800, wav_units="nm"):
+    def display(self, vs_wavelength=False, temporal_data = True, wav_min=400, wav_max=800, wav_units="nm"):
         """
         Plots input data in time and frequency domains
         ---
         Parameters
         ---
-        by_wavelength: binary
+        vs_wavelength: binary
             if True plots FT amplitude vs. wavelength
             if False plots FT amplitude vs. frequency (default)
         temporal_data: binary
@@ -134,7 +130,7 @@ class Interferogram:
         #
         # plot
 
-        if by_wavelength is False:
+        if vs_wavelength is False:
             freq = self.freq
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft)
             xlabel = "Frequency, Hz"
@@ -158,6 +154,20 @@ class Interferogram:
         plt.suptitle(self.filetoread[9:-4])
         plt.show()
 
+
+    def display_all(self, vs_wavelength=True, wav_min=None, wav_max=None, wav_units=None):
+        """
+        Plots all input data that are contained in a directory  in time and frequency domains
+        """
+        for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
+            base_name = os.path.basename(f)
+            result = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
+            time_step = float(result["step_size"])
+            #
+            # read interferograms and plot data
+            ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
+            ifgm.read_data()
+            ifgm.display(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
 
 
     def convert_to_wavelength(self):
