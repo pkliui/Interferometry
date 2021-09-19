@@ -50,8 +50,11 @@ class Interferogram:
         self.freq = freq
         self.ft = ft
 
-        if self.time is None and os.path.exists(os.path.join(self.pathtodata, self.filetoread)):
+        fullpath = os.path.join(self.pathtodata, self.filetoread)
+        if self.time is None and os.path.exists(fullpath):
             self.read_data()
+        else:
+            raise ValueError("The path {} is {} ".format(fullpath, os.path.exists(fullpath)))
 
     def read_data(self):
         """
@@ -116,7 +119,7 @@ class Interferogram:
         Nothing
         """
         #
-        # FT data
+        # FT datatensity
         self.ft, self.freq = self.ft_data(self.intensity, self.time, self.time_step * self.get_time_units(self.time_units))
         #
         # get wavelengths samples
@@ -137,6 +140,7 @@ class Interferogram:
             xlabel = "Wavelength, {}".format(wav_units)
         ax.plot(x,y)
         ax.set_xlabel(xlabel)
+        plt.title(self.filetoread[:-4])
         plt.show()
 
     def convert_to_wavelength(self):
