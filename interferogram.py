@@ -88,7 +88,7 @@ class Interferogram:
         else:
             raise ValueError("File path does not exist! Please enter a valid path")
 
-    def display(self, by_wavelength=False, wav_min=400, wav_max=800, wav_units="nm"):
+    def display(self, by_wavelength=False, temporal_data = True, wav_min=400, wav_max=800, wav_units="nm"):
         """
         Plots input data in time and frequency domains
         ---
@@ -97,6 +97,10 @@ class Interferogram:
         by_wavelength: binary
             if True plots FT amplitude vs. wavelength
             if False plots FT amplitude vs. frequency (default)
+        temporal_data: binary
+            if True, displays both the input interferogram and its Fourier transform
+            if False, only FT of the interferogram is plotted
+            Default is True
         wav_min : float
             min wavelength to plot, units set in wav_units
             default is set to the max input freq. value
@@ -129,19 +133,32 @@ class Interferogram:
         wav_min_idx, wav_max_idx = self.get_minmax_indices(wav, wav_min, wav_max, self.get_wavelength_units(wav_units))
         #
         # plot
-        fig, ax = plt.subplots()
+
         if by_wavelength is False:
-            x = self.freq
-            y = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft)
+            freq = self.freq
+            ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft)
             xlabel = "Frequency, Hz"
         else:
-            x = wav[wav_min_idx:wav_max_idx] * (1/self.get_wavelength_units(wav_units))
-            y = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft[wav_min_idx:wav_max_idx])
+            freq = wav[wav_min_idx:wav_max_idx] * (1/self.get_wavelength_units(wav_units))
+            ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft[wav_min_idx:wav_max_idx])
             xlabel = "Wavelength, {}".format(wav_units)
-        ax.plot(x,y)
-        ax.set_xlabel(xlabel)
-        plt.title(self.filetoread[:-4])
+
+        if temporal_data is True:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5),  constrained_layout=True)
+            ax1.plot(self.time, self.intensity)
+            ax1.set_xlabel("Time delay, {}".format(self.time_units))
+            ax1.set_ylabel("Signal intensity, a.u.")
+            ax2.plot(freq, ft_abs)
+            ax2.set_xlabel(xlabel)
+            ax2.set_ylabel("FT amplitude, a.u.")
+        else:
+            fig, ax = plt.subplots(constrained_layout=True)
+            ax.plot(freq, ft_abs)
+            ax.set_xlabel(xlabel)
+        plt.suptitle(self.filetoread[9:-4])
         plt.show()
+
+
 
     def convert_to_wavelength(self):
         """
