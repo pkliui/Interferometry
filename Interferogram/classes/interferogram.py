@@ -5,8 +5,12 @@ from matplotlib import pyplot as plt
 import glob
 from parse import parse
 
+from scipy.signal import get_window
 
-class Interferogram:
+from Interferogram.classes.base import BaseInterferometry
+
+
+class Interferogram(BaseInterferometry):
     """
     class for 1D interferometric data
     """
@@ -161,14 +165,32 @@ class Interferogram:
         """
         for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
             base_name = os.path.basename(f)
-            result = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
-            time_step = float(result["step_size"])
+            extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
+            time_step = float(extracted_time_step["step_size"])
             #
             # read interferograms and plot data
             ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
             ifgm.read_data()
             ifgm.display(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
 
+    def display_power_vs_intensity(self):
+
+        power_vs_intensity = []
+
+        for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
+            base_name = os.path.basename(f)
+            # extract time step
+            extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
+            time_step = float(extracted_time_step["step_size"])
+            # extract power
+            extracted_power = parse("{prefix}-power-{power_value}uW-{suffix}.txt", base_name)
+            power = float(extracted_time_step["power_value"])
+
+            #
+            # read interferograms and plot data
+            ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
+            ifgm.read_data()
+            ifgm.display(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
 
     def convert_to_wavelength(self):
         """
@@ -268,3 +290,40 @@ class Interferogram:
         ft = np.fft.rfft(intensity)[1:]
         freq = np.fft.rfftfreq(len(time), time_step)[1:]
         return ft, freq
+
+
+    @staticmethod
+    def ift_data(intensity, time, time_step):
+        """
+        Computes the inverse Fourier transform of an input sequence
+        and the corresponding frequency samples, given the Fourier transform samples,
+        frequency samples
+        ---
+        Parameters
+        ---
+        intensity: numpy 1D array
+            Signal intensity samples
+        time: numpy 1D array
+            Time samples
+            Assumed to be equally sampled
+            Default is None
+        time_step: float
+            Discretization step at which the time samples were recorded
+            Default is None
+        ---
+        Return
+        ---
+        ft: 1d numpy array
+            Only positive frequencies of the Fourier transformed sequence
+            Excludes the zeroth frequency
+        freq: 1d numpy array
+            Corresponding frequency samples
+            Excludes zeroth frequency
+        """
+        #
+        # begin from 1st element to avoid displaying the zero-th freq. component
+        ft = np.fft.rfft(intensity)[1:]
+        freq = np.fft.rfftfreq(len(time), time_step)[1:]
+        return ft, freq
+
+
