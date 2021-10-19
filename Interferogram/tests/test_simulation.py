@@ -90,8 +90,6 @@ class TestSimulationClass(unittest.TestCase):
         self.sim = Simulation(tau_start=-1, tau_end=1, delta_tau=0.5)
         self.assertTrue(np.array_equal(self.sim.tau_samples, [-1, -0.5, 0, 0.5, 1]))
 
-
-
     def test_get_interferogram(self):
         """
         test computing the interferogram using its analytic expression
