@@ -111,18 +111,22 @@ class Simulation(BaseInterferometry):
         self.e_field, self.envelope
         """
         #
-        # compute the envelope of a Gaussian pulse
-        self.envelope = np.exp(-4 * np.log(2) * (self.time_samples + delay)**2 / self.t_fwhm**2) \
-                        * np.exp(1j * self.t_phase * (self.time_samples + delay)**2)
         #
-        # compute the electric field of a Gaussian pulse
-        self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self.time_samples + delay))
-        #
-        if plotting:
-            fig, ax = plt.subplots(1, figsize=(15, 5))
-            ax.plot(self.time_samples, self.e_field)
-            ax.set_xlabel("Time, s")
-            plt.show()
+        if all(x is not None for x in [self.time_samples, self.t_fwhm, self.t_phase, self.freq]):
+            # compute the envelope of a Gaussian pulse
+            self.envelope = np.exp(-4 * np.log(2) * (self.time_samples + delay)**2 / self.t_fwhm**2) \
+                            * np.exp(1j * self.t_phase * (self.time_samples + delay)**2)
+            #
+            # compute the electric field of a Gaussian pulse
+            self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self.time_samples + delay))
+            #
+            if plotting:
+                fig, ax = plt.subplots(1, figsize=(15, 5))
+                ax.plot(self.time_samples, self.e_field)
+                ax.set_xlabel("Time, s")
+                plt.show()
+        else:
+            raise ValueError("Check input variables, they cannot be None")
 
         return self.e_field, self.envelope
 
@@ -137,24 +141,27 @@ class Simulation(BaseInterferometry):
             Default is False
         ---
         """
-        #
-        # iniitalise interferogram
-        self.interferogram = np.zeros(len(self.tau_samples))
-        # initialise electric field and its envelope at delay = 0
-        e_t, a_t = self.gen_e_field(delay=0)
-        #
-        # compute the interferogram
-        for idx, delay in enumerate(self.tau_samples):
+        if self.tau_samples is not None:
             #
-            # compute the field and its envelope at current delay
-            e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
+            # iniitalise interferogram
+            self.interferogram = np.zeros(len(self.tau_samples))
+            # initialise electric field and its envelope at delay = 0
+            e_t, a_t = self.gen_e_field(delay=0)
             #
-            # compute an interferogram value at current delay
-            self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
-            #self.interferogram[idx] = np.mean(np.abs((e_t + e_t_tau) ** 2) ** 2)
-        #
-        if plotting:
-            fig, ax = plt.subplots(1, figsize=(15, 5))
-            ax.plot(self.tau_samples, self.interferogram)
-            ax.set_xlabel("Time, s")
-            plt.show()
+            # compute the interferogram
+            for idx, delay in enumerate(self.tau_samples):
+                #
+                # compute the field and its envelope at current delay
+                e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
+                #
+                # compute an interferogram value at current delay
+                self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
+                #self.interferogram[idx] = np.mean(np.abs((e_t + e_t_tau) ** 2) ** 2)
+            #
+            if plotting:
+                fig, ax = plt.subplots(1, figsize=(15, 5))
+                ax.plot(self.tau_samples, self.interferogram)
+                ax.set_xlabel("Time, s")
+                plt.show()
+        else:
+            raise ValueError("self.tau_samples variable cannot be None")
