@@ -4,6 +4,10 @@ import os
 from matplotlib import pyplot as plt
 import glob
 from parse import parse
+import re
+import operator
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.colors as colors
 
 from Interferogram.classes.base import BaseInterferometry
 
@@ -132,7 +136,7 @@ class Interferogram(BaseInterferometry):
         wav_min_idx, wav_max_idx = self.get_minmax_indices(wav, wav_min, wav_max, self.get_wavelength_units(wav_units))
         #
         # plot
-
+        #
         if vs_wavelength is False:
             x = self.freq
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft)
@@ -141,7 +145,7 @@ class Interferogram(BaseInterferometry):
             x = wav[wav_min_idx:wav_max_idx] * (1/self.get_wavelength_units(wav_units))
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft[wav_min_idx:wav_max_idx])
             xlabel = "Wavelength, {}".format(wav_units)
-
+        #
         if temporal_data is True:
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5),  constrained_layout=True)
             ax1.plot(self.time, self.intensity)
@@ -171,6 +175,145 @@ class Interferogram(BaseInterferometry):
             ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
             ifgm.read_data()
             ifgm.display(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
+
+    def display_data_vs_parameter(self, ft_data=True, parameter=None, log_scale=False,
+                                  wav_fund=800e-9, title="Some title", normalize=False, normalizing_width=10e-15):
+        """
+        Plots all data in a directory as intensity heat maps
+        as a function of a parameter
+        ---
+        Parameters
+        ---
+        ft_data: bool, optional
+            What kind of data to plot
+            If True, FT of the interferogram plotted
+            If False, the interferogram itself
+            Default is True
+        parameter: str
+            What kind of parameter to plot the data against
+            Must be one of the following: "intrange", "power"
+            "intrange" stands for integration range of an electron pulse
+            "power" stands for average laser power
+            It is assumed that the filename contains the parameter keyword and that it is followed by
+            the corresponding value
+            Default is None
+        log_scale: bool
+            If True, log of data is plotted
+            Default is False
+        wav_fund: float
+            Fundamental wavelength present in data, m
+            Needed to scale the parameter axis if ft_data=True
+            Default: 800e-9 m
+        title: str, optional
+            Figure title
+            Default: "Some title"
+        normalize: bool, optional
+            Whether to normalize data to its maximal pixel value
+            Default is False
+        normalizing_width: float, optional
+            Temporal window over which to compute the mean value for interferogram normalization
+            Default : 10e-15, m
+        """
+        #
+        # initialise lists to keep data and parameters
+        signal_and_parameter = []
+        parameter_values = []
+        parameter_names = {"intrange": "Electron pulse's integration range ", "power": "Average power "}
+        #
+        if parameter in parameter_names:
+            #
+            for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
+                #
+                # extract base name
+                base_name = os.path.basename(f)
+                #
+                # extract temporal sampling step
+                extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
+                time_step = float(extracted_time_step["step_size"])
+                #
+                # extract parameter values
+                if parameter == "intrange":
+                    extracted_parameter_value = parse("{prefix}-intrange-{parameter_value}-{suffix}.txt", base_name)
+                elif parameter == "power":
+                    extracted_parameter_value = parse("{prefix}-power-{parameter_value}-{suffix}.txt", base_name)
+                else:
+                    raise ValueError("Parameter must be set to one of : 'intrange', 'power' ! ")
+                #
+                parameter_value = float(re.findall(r'\D+|\d+', extracted_parameter_value["parameter_value"])[0])
+                parameter_unit = str(re.findall(r'\D+|\d+', extracted_parameter_value["parameter_value"])[1])
+                parameter_values.append(parameter_value)
+                #
+                # read interferogram and plot data
+                ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
+                ifgm.read_data()
+                #
+                # data to plot
+                if ft_data:
+                    # FT the signal and normalise it
+                    ft, freq = self.ft_data(ifgm.intensity, ifgm.time,
+                                                      time_step * self.get_time_units(self.time_units))
+                    if normalize:
+                        signal_and_parameter.append((parameter_value, np.abs(np.array(ft)) / np.max(np.abs(np.array(ft)))))
+                    else:
+                        signal_and_parameter.append((parameter_value, np.abs(np.array(ft))))
+                else:
+                    if normalize:
+                        # for interferogram normalization is by subtracting the mean value far away from time zero
+                        signal_and_parameter.append((parameter_value, np.abs(np.array(ifgm.intensity)) - np.mean(
+                            np.abs(np.array(ifgm.intensity[0:int(normalizing_width/(time_step * self.get_time_units(self.time_units)))])))))
+                    else:
+                        signal_and_parameter.append((parameter_value, np.abs(np.array(ifgm.intensity))))
+                #
+            #
+            parameters_sorted, data_sorted = self.sort_list_of_tuples(signal_and_parameter)
+            data_sorted = np.array(data_sorted)
+            #
+
+            if ft_data:
+                # frequency spacing
+                freq_fund = freq / (3e8 / wav_fund)
+                df2 = freq_fund[1] - freq_fund[0]
+            else:
+                freq_fund = ifgm.time
+                df2 = ifgm.time_step
+            #
+            fig, ax = plt.subplots(figsize=(10, 5))
+            if log_scale is True:
+                im = ax.imshow(np.log(data_sorted),
+                      extent=(freq_fund[0]-df2/2, freq_fund[-1]+df2/2,
+                              0,1), # 0,1 at the last two position of extent is just to have some dummy values
+                      # they are replaced by ticklabels (parameter values) below
+                cmap = plt.get_cmap("bwr"), vmin = data_sorted.min(), vmax = data_sorted.max(), norm=MidpointNormalize(midpoint=0)
+                      )
+            else:
+                im = ax.imshow(data_sorted,
+                          extent=(freq_fund[0] - df2 / 2, freq_fund[-1] + df2 / 2,
+                                  0, 1),  # 0,1 at the last two position of extent is just to have some dummy values
+                          # they are replaced by ticklabels (parameter values) below
+                cmap = plt.get_cmap("bwr"), vmin = data_sorted.min(), vmax = data_sorted.max(), norm=MidpointNormalize(midpoint=0)
+                          )
+
+            # Where we want the ticks, in pixel locations
+            ticks = np.linspace(0, 1, len(parameter_values))
+            # What those pixel locations correspond to in data coordinates.
+            # Also set the float format here
+            ticklabels = ["{:6.2f}".format(i) for i in parameters_sorted]
+            ax.set_yticks(ticks)
+            ax.set_yticklabels(ticklabels)
+            ax.set_aspect('auto')
+            ax.set_xlabel("Frequency, in units of fundamental")
+            ax.set_ylabel(parameter_names[parameter] + ", " + parameter_unit)
+
+
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes('right', size='5%', pad=0.05)
+            fig.colorbar(im, cax=cax, orientation='vertical')
+            ax.set_title(title)
+
+            plt.show()
+
+        else:
+            raise ValueError("Parameter cannot be None!")
 
     def convert_to_wavelength(self):
         """
@@ -272,4 +415,39 @@ class Interferogram(BaseInterferometry):
         return ft, freq
 
 
+    def sort_list_of_tuples(self, list_of_tuples, sort_by_idx=0, reverse=False):
+        """
+        Sorts elements in a list of tuples
+        ---
+        Parameters
+        ---
+        list_of_tuples: list
+            List of tuples
+        sort_by_idx: int, optional
+            Number of index to sort by
+            E.g. if a tuple consists of two elements and we would like to sort by the second, set to 1
+            Default: 0
+        reverse: bool, optional
+            If True, the sorting is done in ascending order.
+            If False - in descending.
+            Default is True
+        """
 
+        # sort by the parameter_value
+        # signal_and_parameter.sort(key=operator.itemgetter(1))
+        list_of_tuples = sorted(list_of_tuples, key=lambda x: x[sort_by_idx], reverse=reverse)
+        # split it back into sorted
+        return zip(*list_of_tuples)
+
+
+class MidpointNormalize(colors.Normalize):
+    def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
+        self.midpoint = midpoint
+        colors.Normalize.__init__(self, vmin, vmax, clip)
+
+    def __call__(self, value, clip=None):
+        # I'm ignoring masked values and all kinds of edge cases to make a
+        # simple example...
+        x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
+        return np.ma.masked_array(np.interp(value, x, y))
+#####
