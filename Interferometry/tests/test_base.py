@@ -3,7 +3,7 @@ import shutil, tempfile
 
 from ddt import ddt
 
-from Interferogram.classes.base import BaseInterferometry
+from Interferometry.classes.base import BaseInterferometry
 
 
 @ddt

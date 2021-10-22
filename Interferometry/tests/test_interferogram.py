@@ -5,7 +5,7 @@ import shutil, tempfile
 
 from ddt import ddt
 
-from Interferogram.classes.interferogram import Interferogram
+from Interferometry.classes.interferogram import Interferogram
 
 @ddt
 class TestInterferogramClass(unittest.TestCase):

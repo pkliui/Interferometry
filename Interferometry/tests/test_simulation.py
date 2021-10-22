@@ -5,7 +5,7 @@ import shutil, tempfile
 
 from ddt import ddt
 
-from Interferogram.classes.simulation import Simulation
+from Interferometry.classes.simulation import Simulation
 
 from matplotlib import pyplot as plt
 
