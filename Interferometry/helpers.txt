@@ -1,0 +1,106 @@
+    def display_power_vs_intensity(self):
+
+        power_vs_intensity = []
+
+        for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
+            base_name = os.path.basename(f)
+            # extract time step
+            extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
+            time_step = float(extracted_time_step["step_size"])
+            # extract power
+            extracted_power = parse("{prefix}-power-{power_value}uW-{suffix}.txt", base_name)
+            power = float(extracted_time_step["power_value"])
+
+            #
+            # read interferograms and plot data
+            ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
+            ifgm.read_data()
+            ifgm.display(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
+
+
+
+
+    # def plot_spectrogram(self, signal_stft, f_stft_samples, t_stft_samples):
+    #     """
+    #     plot spectrogram
+    #     """
+    #     f, axx = plt.subplots(1, 2, figsize=(15, 5), constrained_layout=True)
+    #
+    #     df1 = f_stft_samples[1] - f_stft_samples[0]  # the frequency step
+    #     delta_t = t_stft_samples[1] - t_stft_samples[0]
+    #
+    #     im = axx[0].imshow(np.real(signal_stft * np.conj(signal_stft)), aspect='auto',
+    #                        interpolation=None, origin='lower',
+    #                        extent=(t_stft_samples[0] - delta_t / 2, t_stft_samples[-1] + delta_t / 2,
+    #                                f_stft_samples[0] - df1 / 2, f_stft_samples[-1] + df1 / 2))
+    #     axx[0].set_ylabel('frequency [Hz]')
+    #     plt.colorbar(im, ax=axx[0])
+    #     axx[0].set_title('spectrogram')
+    #
+    #     print("Spectrogram shape ", signal_stft.shape)
+    #     print("WT shape ", signal_stft.shape)
+    #
+    #     plt.show()
+
+
+
+
+
+    # def test_compute_spectrogram_exp_iwt(self):
+    #     """
+    #     test computing a spectrogram of a harmonic function exp(i*w*t)
+    #     """
+    #     # period and frequency of the signal
+    #     period = 0.1
+    #     freq = 1 / period
+    #     #
+    #     # generate samples in time domain
+    #     # start, end and sampling interval in time domain
+    #     t_start = 0
+    #     t_end = period * 1
+    #     delta_t = period / 10
+    #     # number of samples in time domain
+    #     t_nsteps = int((t_end - t_start) / delta_t)
+    #     time_samples = np.linspace(t_start, t_end , t_nsteps)
+    #     #
+    #     signal = np.exp(1j * 2 * np.pi * freq * time_samples)
+    #
+    #     #plt.plot(time_samples, signal)
+    #     #plt.show()
+    #
+    #     # compute spectrogram
+    #     f_stft_samples, t_stft_samples, signal_stft = self.baseif.compute_spectrogram(signal, 1/delta_t)
+    #
+    #     self.baseif.plot_spectrogram(signal_stft, f_stft_samples, t_stft_samples)
+    #
+    #
+    #
+
+
+
+
+
+    # def gen_g2(self, plotting=False):
+    #     #
+    #     # iniitalise g2
+    #     self.g2 = np.zeros(len(self.tau_samples))
+    #     #
+    #     # initialise electric field and its envelope at delay = 0
+    #     e_t, a_t = self.gen_e_field(delay=0)
+    #     #
+    #     # compute the g2
+    #     for idx, delay in enumerate(self.tau_samples):
+    #         #
+    #         # compute the field and its envelope at current delay
+    #         e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
+    #         #
+    #         # compute an interferogram value at current delay
+    #         self.g2[idx] = np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau)) / (np.mean((e_t*e_t_tau)**2))
+    #     self.g2 /= np.mean(self.g2[0:250])
+    #     #
+    #     if plotting:
+    #         fig, ax = plt.subplots(1, figsize=(15, 5))
+    #         ax.plot(self.tau_samples, self.g2)
+    #         ax.set_xlabel("Time, s")
+    #         plt.show()
+    #
