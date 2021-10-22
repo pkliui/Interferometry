@@ -114,11 +114,11 @@ class Simulation(BaseInterferometry):
         #
         if all(x is not None for x in [self.time_samples, self.t_fwhm, self.t_phase, self.freq]):
             # compute the envelope of a Gaussian pulse
-            self.envelope = np.exp(-4 * np.log(2) * (self.time_samples + delay)**2 / self.t_fwhm**2) \
-                            * np.exp(1j * self.t_phase * (self.time_samples + delay)**2)
+            self.envelope = np.exp(-4 * np.log(2) * (self.time_samples - delay)**2 / self.t_fwhm**2) \
+                            * np.exp(1j * self.t_phase * (self.time_samples - delay)**2)
             #
             # compute the electric field of a Gaussian pulse
-            self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self.time_samples + delay))
+            self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self.time_samples - delay))
             #
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
@@ -155,8 +155,6 @@ class Simulation(BaseInterferometry):
                 e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
                 #
                 # compute an interferogram value at current delay
-                #self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
-                #self.interferogram[idx] = np.sum((e_t + e_t_tau) ** 2)
                 self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
             #
             if plotting:
