@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from Interferogram.classes.base import BaseInterferometry
+from Interferometry.classes.base import BaseInterferometry
 
 
 class Simulation(BaseInterferometry):

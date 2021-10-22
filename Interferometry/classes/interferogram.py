@@ -9,7 +9,7 @@ import operator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
 
-from Interferogram.classes.base import BaseInterferometry
+from Interferometry.classes.base import BaseInterferometry
 
 
 class Interferogram(BaseInterferometry):
