@@ -86,12 +86,30 @@ class Interferogram(BaseInterferometry):
             #
             # convert to array
             data = np.array(data)
+            #
+            # extract time and intensity
             self.time = data[:, 0]
             self.intensity = data[:, 1]
+            #
+            # make sure time is in SI units
+            if self.time_step is None:
+                #
+                if self.get_time_step() >= self.get_time_units(self.time_units):
+                    print("self.get_time_step() ", self.get_time_step())
+                    print("self.get_time_units(self.time_units)", self.get_time_units(self.time_units))
+                    self.time_step = self.get_time_step() * self.get_time_units(self.time_units)
+                    self.time = self.time * self.get_time_units(self.time_units)
+                else:
+                    print("self.get_time_step() ", self.get_time_step())
+                    print("self.get_time_units(self.time_units)", self.get_time_units(self.time_units))
+                    self.time_step = self.get_time_step()
+            else:
+                self.time_step = self.get_time_step() * self.get_time_units(self.time_units)
+                self.time = self.time * self.get_time_units(self.time_units)
         else:
             raise ValueError("File path does not exist! Please enter a valid path")
 
-    def display(self, vs_wavelength=False, temporal_data = True, wav_min=400, wav_max=800, wav_units="nm"):
+    def display(self, vs_wavelength=False, temporal_data=True, wav_min=400, wav_max=800, wav_units="nm"):
         """
         Plots input data in time and frequency domains
         ---
@@ -127,7 +145,7 @@ class Interferogram(BaseInterferometry):
         """
         #
         # FT datatensity
-        self.ft, self.freq = self.ft_data(self.intensity, self.time, self.time_step * self.get_time_units(self.time_units))
+        self.ft, self.freq = self.ft_data(self.intensity, self.time, self.time_step)
         #
         # get wavelengths samples
         wav = self.convert_to_wavelength()
@@ -161,18 +179,15 @@ class Interferogram(BaseInterferometry):
         plt.suptitle(self.filetoread[9:-4])
         plt.show()
 
-
     def display_all(self, vs_wavelength=True, wav_min=None, wav_max=None, wav_units=None):
         """
-        Plots all input data that are contained in a directory  in time and frequency domains
+        Plots all input data that are contained in a directory in time and frequency domains
         """
         for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
             base_name = os.path.basename(f)
-            extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
-            time_step = float(extracted_time_step["step_size"])
             #
             # read interferograms and plot data
-            ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
+            ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units)
             ifgm.read_data()
             ifgm.display(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
 
@@ -214,6 +229,8 @@ class Interferogram(BaseInterferometry):
                 # extract temporal sampling step
                 extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
                 time_step = float(extracted_time_step["step_size"])
+                #if self.time_step is None:
+                #    self.time_step = self.get_time_step() * self.get_time_units(self.time_units)
                 #
                 # extract parameter values
                 if parameter == "intrange":
@@ -235,9 +252,7 @@ class Interferogram(BaseInterferometry):
                 # normalize and add parameter
                 # by dividing by the mean value far away from time zero
                 # and then subtracting 1 to have 0 at backgorund level
-                signal = np.abs(np.array(ifgm.intensity))
-                signal_mean_bg = np.mean(np.abs(np.array(ifgm.intensity[0:int(normalizing_width/(time_step * self.get_time_units(self.time_units)))])))
-                signal_norm = signal / signal_mean_bg - 1
+                signal_norm = self.normalize(ifgm.intensity, time_step * self.get_time_units(self.time_units), normalizing_width=normalizing_width)
                 signal_and_parameter.append((parameter_value,  signal_norm))
             #
             # sort by parameter values in descending order so that the signal recorded at the largest parameter is on top
@@ -250,7 +265,7 @@ class Interferogram(BaseInterferometry):
             #
             # plot
             fig, ax = plt.subplots(figsize=(10, 5))
-            im = ax.imshow(data_sorted,
+            im = ax.imshow(data_sorted, interpolation=None, 
                            extent=(ifgm.time[0] - ifgm.time_step / 2, ifgm.time[-1] + ifgm.time_step / 2, 0, 1),
                            cmap = plt.get_cmap("bwr"), vmin = data_sorted.min(), vmax = data_sorted.max(), norm=MidpointNormalize(midpoint=0)) #
             # set the ticks and ticks labels (0,1 is because I set 0,1 in imshow(extent=(...0,1))
@@ -374,9 +389,37 @@ class Interferogram(BaseInterferometry):
             clb.ax.get_yaxis().labelpad = 15
             clb.ax.set_ylabel("Intensity of interferogram's FT, a.u.", rotation=270)
             plt.show()
-
         else:
             raise ValueError("Parameter cannot be None!")
+
+    def compute_spectrogram_of_interferogram(self, nperseg=2**6, plotting=False, **kwargs):
+        """
+        Computes and displays experimental spectrogram
+        ---
+        Parameters
+        ---
+        nperseg: int, optional
+            window size of the STFT
+        plotting: bool, opional
+            If True, generates a plot of the spectrogram
+            Default: False
+        """
+        self.compute_spectrogram(self.intensity, self.time_step, nperseg=nperseg, plotting=plotting, **kwargs)
+
+    def normalize_interferogram(self, normalizing_width=10e-15):
+        """
+        Normalizes interferogram
+        ---
+        Parameters
+        ---
+        normalizing_width: float, optional
+            the width of integration range to be used for signals' mormalization, in seconds
+        ---
+        Return
+        ---
+        Normalized interferogram
+        """
+        self.intensity = self.normalize(self.intensity, self.time_step, normalizing_width=normalizing_width)
 
     def convert_to_wavelength(self):
         """
@@ -390,6 +433,13 @@ class Interferogram(BaseInterferometry):
         # compute the walength's samples
         wav = 3e8 / self.freq
         return wav
+
+    def get_time_step(self):
+        """
+        Get a step from experimental time_samples
+        It is assumed that the samples are equally sampled!
+        """
+        return np.abs(self.time[1] - self.time[0])
 
     @staticmethod
     def get_wavelength_units(units):
