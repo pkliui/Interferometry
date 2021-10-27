@@ -66,15 +66,15 @@ class Simulation(BaseInterferometry):
         # temporal phase of a pulse
         self.t_phase = t_phase
         #
-        # sampling parameters
+        # e-field sampling parameters (private)
         # start, end  and sampling interval in time domain
-        self.t_start = t_start
-        self.t_end = t_end # (including this value)
-        self.delta_t = delta_t
+        self._t_start = t_start
+        self._t_end = t_end # (including this value)
+        self._delta_t = delta_t
         # number of samples in time domain, 1 to include the end value
-        self.t_nsteps = int((t_end - t_start) / delta_t) + 1
+        self._t_nsteps = int((t_end - t_start) / delta_t) + 1
         # time domain samples
-        self.time_samples = np.linspace(t_start, t_end, self.t_nsteps)
+        self._time_samples = np.linspace(t_start, t_end, self._t_nsteps)
         #
         # temporal delay parameters
         # start, end and sampling interval for temporal delay
@@ -99,7 +99,7 @@ class Simulation(BaseInterferometry):
         Parameters
         ---
         delay: float, optional
-            Temporal delay to computed the electric field of a pulse shifted in time,
+            Temporal delay to compute the electric field of a pulse shifted in time,
             in femtoseconds
             Default is 0 fs
         plotting: bool, optional
@@ -112,17 +112,17 @@ class Simulation(BaseInterferometry):
         """
         #
         #
-        if all(x is not None for x in [self.time_samples, self.t_fwhm, self.t_phase, self.freq]):
+        if all(x is not None for x in [self._time_samples, self.t_fwhm, self.t_phase, self.freq]):
             # compute the envelope of a Gaussian pulse
-            self.envelope = np.exp(-4 * np.log(2) * (self.time_samples - delay)**2 / self.t_fwhm**2) \
-                            * np.exp(1j * self.t_phase * (self.time_samples - delay)**2)
+            self.envelope = np.exp(-4 * np.log(2) * (self._time_samples - delay)**2 / self.t_fwhm**2) \
+                            * np.exp(1j * self.t_phase * (self._time_samples - delay)**2)
             #
             # compute the electric field of a Gaussian pulse
-            self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self.time_samples - delay))
+            self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self._time_samples - delay))
             #
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
-                ax.plot(self.time_samples, self.e_field)
+                ax.plot(self._time_samples, self.e_field)
                 ax.set_xlabel("Time, s")
                 plt.show()
         else:
@@ -130,12 +130,15 @@ class Simulation(BaseInterferometry):
 
         return self.e_field, self.envelope
 
-    def gen_interferogram(self, plotting=False):
+    def gen_interferogram(self, delay=0, plotting=False):
         """
         Computes an interferometric autocorrelation (an interferogram)
         ---
         Parameters
         ---
+        delay: float, optional
+            Arbitrary temporal shift, in femtoseconds (e.g. to simulate non-centered experimental data)
+            Default is 0 fs
         plotting: bool, optional
             If True, displays a plot of the computed interferogram
             Default is False
@@ -149,10 +152,10 @@ class Simulation(BaseInterferometry):
             e_t, a_t = self.gen_e_field(delay=0)
             #
             # compute the interferogram
-            for idx, delay in enumerate(self.tau_samples):
+            for idx, tau_sample in enumerate(self.tau_samples):
                 #
-                # compute the field and its envelope at current delay
-                e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
+                # compute the field and its envelope at current tau_sample delay + additional temporal delay
+                e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample + delay)
                 #
                 # compute an interferogram value at current delay
                 self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
@@ -164,3 +167,5 @@ class Simulation(BaseInterferometry):
                 plt.show()
         else:
             raise ValueError("self.tau_samples variable cannot be None")
+
+

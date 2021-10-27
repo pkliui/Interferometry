@@ -56,26 +56,26 @@ class TestSimulationClass(unittest.TestCase):
         test number of samples in time domain t_nsteps
         """
         self.sim = Simulation(t_start=-1, t_end=1, delta_t=1)
-        self.assertEqual(self.sim.t_nsteps, 3)
+        self.assertEqual(self.sim._t_nsteps, 3)
         #
         self.sim = Simulation(t_start=0, t_end=5, delta_t=1)
-        self.assertEqual(self.sim.t_nsteps, 6)
+        self.assertEqual(self.sim._t_nsteps, 6)
         #
         self.sim = Simulation(t_start=0, t_end=3, delta_t=0.5)
-        self.assertEqual(self.sim.t_nsteps, 7)
+        self.assertEqual(self.sim._t_nsteps, 7)
 
     def test_time_samples(self):
         """
         test samples in time domain time_samples
         """
         self.sim = Simulation(t_start=0, t_end=5, delta_t=1)
-        self.assertTrue(np.array_equal(self.sim.time_samples, [0, 1, 2, 3, 4, 5]))
+        self.assertTrue(np.array_equal(self.sim._time_samples, [0, 1, 2, 3, 4, 5]))
         #
         self.sim = Simulation(t_start=-3, t_end=3, delta_t=1)
-        self.assertTrue(np.array_equal(self.sim.time_samples, [-3, -2, -1, 0, 1, 2, 3]))
+        self.assertTrue(np.array_equal(self.sim._time_samples, [-3, -2, -1, 0, 1, 2, 3]))
         #
         self.sim = Simulation(t_start=-1, t_end=1, delta_t=0.5)
-        self.assertTrue(np.array_equal(self.sim.time_samples, [-1, -0.5, 0, 0.5, 1]))
+        self.assertTrue(np.array_equal(self.sim._time_samples, [-1, -0.5, 0, 0.5, 1]))
 
     def test_tau_samples(self):
         """
