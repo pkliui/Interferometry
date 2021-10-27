@@ -109,5 +109,21 @@ class TestInterferogramClass(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = self.ifgm.get_time_units("ns")
 
+    def test_get_time_step(self):
+        """
+        test getting a temporal step
+        """
+        #
+        self.ifgm = Interferogram()
+        self.ifgm.time = np.array([1, 3, 5, 7, 9])
+        time_step = self.ifgm.get_time_step()
+        self.assertEqual(2, time_step)
+        #
+        self.ifgm = Interferogram()
+        self.ifgm.time = np.array([1e-15, 3e-15, 5e-15, 7e-15, 9e-15])
+        time_step = self.ifgm.get_time_step()
+        self.assertAlmostEqual(2e-15, time_step)
+
+
 if __name__ == '__main__':
     unittest.main()
