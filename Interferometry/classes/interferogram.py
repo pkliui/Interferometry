@@ -421,6 +421,22 @@ class Interferogram(BaseInterferometry):
         """
         self.intensity = self.normalize(self.intensity, self.time_step, normalizing_width=normalizing_width)
 
+
+    def normalize_interferogram_1to8(self, normalizing_width=10e-15):
+        """
+        Normalizes interferogram to have 1:8 ratio
+        ---
+        Parameters
+        ---
+        normalizing_width: float, optional
+            the width of integration range to be used for signals' mormalization, in seconds
+        ---
+        Return
+        ---
+        Normalized interferogram
+        """
+        self.intensity = self.normalize_1to8(self.intensity, self.time_step, normalizing_width=normalizing_width)
+
     def convert_to_wavelength(self):
         """
         Converts frequency samples to wavelength samples
