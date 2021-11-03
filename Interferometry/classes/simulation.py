@@ -119,6 +119,7 @@ class Simulation(BaseInterferometry):
             #
             # compute the electric field of a Gaussian pulse
             self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self._time_samples - delay))
+            #self.e_field = self.envelope * np.exp(-1j * 2 * np.pi * self.freq * (self._time_samples - delay))
             #
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
@@ -168,4 +169,43 @@ class Simulation(BaseInterferometry):
         else:
             raise ValueError("self.tau_samples variable cannot be None")
 
+    def gen_g2_simulation(self, plotting=False):
+        #
+        # iniitalise g2
+        self.g2 = np.zeros(len(self.tau_samples))
+        #
+        # initialise electric field and its envelope at delay = 0
+        e_t, a_t = self.gen_e_field(delay=0)
+        #
+        # compute the g2
+        for idx, delay in enumerate(self.tau_samples):
+            #
+            # compute the field and its envelope at current delay
+            e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
+            #
+            # compute an interferogram value at current delay
+            self.g2[idx] = np.real(np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau)) / np.mean((e_t * np.conj(e_t))**2))
+        #
+        if plotting:
+            fig, ax = plt.subplots(1, figsize=(15, 5))
+            ax.plot(self.tau_samples, self.g2)
+            ax.set_xlabel("Time, s")
+            plt.show()
 
+    def normalize_simulation(self, normalizing_width=10e-15, start_at=None):
+        """
+        Normalizes interferogram
+        ---
+        Parameters
+        ---
+        normalizing_width: float, optional
+            the width of integration range to be used for signals' mormalization, in seconds
+        ---
+        Return
+        ---
+        Normalized interferogram
+        """
+        if start_at is not None:
+            self.interferogram = self.normalize(self.interferogram, self.delta_tau, normalizing_width=normalizing_width, start_at=start_at)
+        else:
+            raise ValueError("starting value start_at cannot be none! ")
