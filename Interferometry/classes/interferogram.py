@@ -106,6 +106,11 @@ class Interferogram(BaseInterferometry):
             else:
                 self.time_step = self.get_time_step() * self.get_time_units(self.time_units)
                 self.time = self.time * self.get_time_units(self.time_units)
+            #
+            # make sure time samples are sorted in ascending order
+            # and the corresponding signal values too
+            self.time = np.sort(self.time)
+            self.intensity = np.flip(self.intensity)
         else:
             raise ValueError("File path does not exist! Please enter a valid path")
 
@@ -392,6 +397,24 @@ class Interferogram(BaseInterferometry):
         else:
             raise ValueError("Parameter cannot be None!")
 
+    def normalize_interferogram(self, normalizing_width=10e-15, start_at=None):
+        """
+        Normalizes interferogram
+        ---
+        Parameters
+        ---
+        normalizing_width: float, optional
+            the width of integration range to be used for signals' normalization, in seconds
+        ---
+        Return
+        ---
+        Normalized interferogram
+        """
+        if start_at is not None:
+            self.intensity = self.normalize(self.intensity, self.time_step, self.time, normalizing_width=normalizing_width, start_at=start_at)
+        else:
+            raise ValueError("starting value start_at cannot be none! ")
+
     def compute_spectrogram_of_interferogram(self, nperseg=2**6, plotting=False, **kwargs):
         """
         Computes and displays experimental spectrogram
@@ -406,36 +429,28 @@ class Interferogram(BaseInterferometry):
         """
         self.compute_spectrogram(self.intensity, self.time_step, nperseg=nperseg, plotting=plotting, **kwargs)
 
-    def normalize_interferogram(self, normalizing_width=10e-15):
-        """
-        Normalizes interferogram
-        ---
-        Parameters
-        ---
-        normalizing_width: float, optional
-            the width of integration range to be used for signals' mormalization, in seconds
-        ---
-        Return
-        ---
-        Normalized interferogram
-        """
-        self.intensity = self.normalize(self.intensity, self.time_step, normalizing_width=normalizing_width)
-
-
-    def normalize_interferogram_1to8(self, normalizing_width=10e-15):
-        """
-        Normalizes interferogram to have 1:8 ratio
-        ---
-        Parameters
-        ---
-        normalizing_width: float, optional
-            the width of integration range to be used for signals' mormalization, in seconds
-        ---
-        Return
-        ---
-        Normalized interferogram
-        """
-        self.intensity = self.normalize_1to8(self.intensity, self.time_step, normalizing_width=normalizing_width)
+    def gen_g2_interferogram(self, plotting=False):
+        #
+        # iniitalise g2
+        self.g2 = np.zeros(len(self.time))
+        #
+        # initialise electric field and its envelope at delay = 0
+        e_t = np.sqrt(self.intensity)
+        #
+        # compute the g2
+        for idx, delay in enumerate(self.tau_samples):
+            #
+            # compute the field and its envelope at current delay
+            e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
+            #
+            # compute an interferogram value at current delay
+            self.g2[idx] = np.real(np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau)) / np.mean((e_t * np.conj(e_t))**2))
+        #
+        if plotting:
+            fig, ax = plt.subplots(1, figsize=(15, 5))
+            ax.plot(self.tau_samples, self.g2)
+            ax.set_xlabel("Time, s")
+            plt.show()
 
     def convert_to_wavelength(self):
         """
@@ -543,7 +558,6 @@ class Interferogram(BaseInterferometry):
         freq = np.fft.rfftfreq(len(time), time_step)[1:]
         return ft, freq
 
-
     def sort_list_of_tuples(self, list_of_tuples, sort_by_idx=0, reverse=False):
         """
         Sorts elements in a list of tuples
@@ -570,13 +584,13 @@ class Interferogram(BaseInterferometry):
 
 
 class MidpointNormalize(colors.Normalize):
+    """
+    Adjust colorbar values to by symmetric with respect to zero
+    """
     def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
         self.midpoint = midpoint
         colors.Normalize.__init__(self, vmin, vmax, clip)
 
     def __call__(self, value, clip=None):
-        # I'm ignoring masked values and all kinds of edge cases to make a
-        # simple example...
         x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
         return np.ma.masked_array(np.interp(value, x, y))
-#####
