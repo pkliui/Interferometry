@@ -130,9 +130,9 @@ class BaseInterferometry:
         else:
             raise ValueError("Time_samples and signal must have the same length!")
 
-    def normalize(self, signal, time_step, normalizing_width=10e-15):
+    def normalize(self, signal, time_step, time_samples, normalizing_width=10e-15, t_norm_start=None):
         """
-        Normalizes an interferogram to have zero mean and maximum intensity of 1
+        Normalizes an interferogram
         ---
         Parameters
         ---
@@ -148,13 +148,97 @@ class BaseInterferometry:
         signal_norm: ndarray
             normalized signal
         """
-        # set integration range for normalization
-        int_range = int(normalizing_width / time_step)
+        if t_norm_start is not None:
+            #
+            # set integration range for normalization
+            idx_norm_range = int(normalizing_width / time_step)
+            idx_norm_start = int(np.argmin(np.abs(t_norm_start - time_samples)))
+            #
+            # compute the mean value of the signal's background for given integration range
+            # and normalize the signal to have 1:8 ratio
+            signal_mean_bg = np.mean(np.abs(np.array(signal[idx_norm_start : idx_norm_range + idx_norm_start])))
+            signal -= signal_mean_bg
+            signal -= - signal.min()
+            signal = 8 * signal / signal.max()
+        else:
+            raise ValueError("starting value t_norm_start cannot be none! ")
+        return signal
+
+    def gen_g2(self, time_samples, plotting=False):
+        """
+        Generates the second order correlation function of the input signal
+        ---
+        Parameters
+        ---
+        signal: ndarray
+            timer series to normalize
+        time_step:
+            temporal step the signal was recorded at
+        normalizing_width: float, optional
+            the width of integration range to be used for signals' mormalization, in seconds
+        ---
+        Return
+        ---
+        signal_norm: ndarray
+            normalized signal
+        """
         #
-        # compute the mean value of the signal's background for given integration range
-        # and normalize signal to have zero mean and max intensity of 1
-        signal_mean_bg = np.mean(np.abs(np.array(signal[0:int_range])))
-        signal = signal - signal_mean_bg
-        signal_norm = signal / signal.max()
+        # iniitalise g2
+        g2 = np.zeros(len(time_samples))
         #
-        return signal_norm
+        # initialise electric field and its envelope at delay = 0
+        e_t, a_t = self.gen_e_field(delay=0)
+        #
+        # compute the g2
+        for idx, delay in enumerate(time_samples):
+            #
+            # compute the field and its envelope at current delay
+            e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
+            #
+            # compute an interferogram value at current delay
+            g2[idx] = np.mean(np.conj(e_t) * np.conj(e_t_tau) * e_t_tau * e_t) / np.mean((np.conj(e_t) * e_t)**2)
+        #self.g2 /= np.mean(self.g2[1500:2500])
+        #
+        if plotting:
+            fig, ax = plt.subplots(1, figsize=(15, 5))
+            ax.plot(time_samples, g2)
+            ax.set_xlabel("Time, s")
+            plt.show()
+
+    def ft_data(self, intensity, time, time_step):
+        """
+        Computes the Fourier transform of an input sequence
+        and the corresponding frequency samples, given the signal intensity samples, temporal samples and a discretization step
+        ---
+        Parameters
+        ---
+        intensity: numpy 1D array
+            Signal intensity samples
+        time: numpy 1D array
+            Time samples
+            Assumed to be equally sampled
+            Default is None
+        time_step: float
+            Discretization step at which the time samples were recorded
+            Default is None
+        ---
+        Return
+        ---
+        ft: 1d numpy array
+            Only positive frequencies of the Fourier transformed sequence
+            Excludes the zeroth frequency
+        freq: 1d numpy array
+            Corresponding frequency samples
+            Excludes zeroth frequency
+        """
+        #
+        # begin from 1st element to avoid displaying the zero-th freq. component
+        ft = np.fft.rfft(intensity)[1:]
+        freq = np.fft.rfftfreq(len(time), time_step)[1:]
+        return ft, freq
+
+    def plot_data(self, time_samples, signal):
+        fig, ax = plt.subplots(1, figsize=(15, 5))
+        ax.plot(time_samples * 10e15, signal)
+        ax.set_xlabel("Time, fs")
+        plt.show()
