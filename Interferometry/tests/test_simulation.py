@@ -34,7 +34,7 @@ class TestSimulationClass(unittest.TestCase):
         """
         test the input arguments are existing and are all None
         """
-        for var in ["e_field", "envelope", "interferogram"]:
+        for var in ["interferogram"]:
             self.assertIn(var, self.sim.__dict__)
             self.assertEqual(self.sim.__dict__[var], None)
 
@@ -81,13 +81,13 @@ class TestSimulationClass(unittest.TestCase):
         """
         test delay samples tau_samples
         """
-        self.sim = Simulation(tau_start=0, tau_end=5, delta_tau=1)
+        self.sim = Simulation(tau_start=0, tau_end=5, tau_step=1)
         self.assertTrue(np.array_equal(self.sim.tau_samples, [0, 1, 2, 3, 4, 5]))
         #
-        self.sim = Simulation(tau_start=-3, tau_end=3, delta_tau=1)
+        self.sim = Simulation(tau_start=-3, tau_end=3, tau_step=1)
         self.assertTrue(np.array_equal(self.sim.tau_samples, [-3, -2, -1, 0, 1, 2, 3]))
         #
-        self.sim = Simulation(tau_start=-1, tau_end=1, delta_tau=0.5)
+        self.sim = Simulation(tau_start=-1, tau_end=1, tau_step=0.5)
         self.assertTrue(np.array_equal(self.sim.tau_samples, [-1, -0.5, 0, 0.5, 1]))
 
     def test_get_interferogram(self):
@@ -98,8 +98,7 @@ class TestSimulationClass(unittest.TestCase):
         """
         self.sim = Simulation(lambd=800e-9, t_fwhm=10e-15,
                               t_start=-15e-15, t_end=15e-15, delta_t=0.01e-15,
-                              tau_start=0, tau_end=30e-15, delta_tau=0.15e-15)
-        #
+                              tau_start=0, tau_end=30e-15, tau_step=0.15e-15)
         # initialise expected interferogram array
         expected_interferogram = np.zeros(len(self.sim.tau_samples))
         #
@@ -122,7 +121,7 @@ class TestSimulationClass(unittest.TestCase):
                 np.sum(a_t ** 2 * np.conj(a_t_tau) ** 2 * np.exp(2 * 1j * 2 * np.pi * self.sim.freq * delay)))
         #
         # compute interferogram using gen_interferogram method
-        self.sim.gen_interferogram()
+        self.sim.gen_interferogram_simulation()
         # compare with analytic result
         self.assertTrue(np.array_equal(np.round(expected_interferogram), np.round(self.sim.interferogram)))
 
