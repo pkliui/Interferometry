@@ -5,7 +5,6 @@ from matplotlib import pyplot as plt
 import glob
 from parse import parse
 import re
-import operator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
 
@@ -16,8 +15,8 @@ class Interferogram(BaseInterferometry):
     """
     class for 1D interferometric data
     """
-    def __init__(self, pathtodata=None, filetoread=None, time=None, time_step=None, time_units="fs", intensity=None,
-                 freq=None, ft=None):
+    def __init__(self, pathtodata=None, filetoread=None, tau_samples=None, tau_step=None, tau_units="fs", interferogram=None,
+                 freq=None, ft=None, g2=None):
         """
         Initializes the class
 
@@ -30,103 +29,94 @@ class Interferogram(BaseInterferometry):
         filetoread: str
             Filename to read, with extension
             Default is None
-        time: numpy 1D array
+        tau_samples: numpy 1D array
             Time samples
             Assumed to be equally sampled
             Default is None
-        time_step: float
-            Step at which the time samples were recorded
+        tau_step: float
+            Step at which the tau samples were recorded
             Default is None
-        time_units: str
-            Units of time samples
+        tau_units: str, optional
+            Units of temporal samples
             Possible units are "as", "fs", "ps"
             Default is femtosecond ("fs")
-        intensity: numpy 1D array
-            Signal intensity samples
+        interferogram: numpy 1D array
+            Samples of interferogram
             Default is None
         freq: 1D numpy array
             Frequency samples as set by the discrete Fourier transform
         ft: 1D numpy array
-            Samples of the discrete  Fourier transform of the signal intensity data
+            Samples of the discrete  Fourier transform of the signal interferogram data
+        g2: 1D array of floats
+            Samples of the second-order correlation function,
+            extracted from the interferogram
+            Default: None
         """
         super().__init__()
         self.pathtodata = pathtodata
         self.filetoread = filetoread
-        self.time = time
-        self.time_units = time_units
-        self.time_step = time_step
-        self.intensity = intensity
+        self.tau_samples = tau_samples
+        self.tau_step = tau_step
+        self.tau_units = tau_units
+        self.interferogram = interferogram
         self.freq = freq
         self.ft = ft
+        self.g2 = g2
 
     def read_data(self):
         """
-        reads an intensity vs. time data saved in two tabulated columns
+        Reads an interferogram vs. tau data saved in two tabulated columns
         with no header
+
         ---
-        Modifies the following class variables:
+        Modifies:
         ---
-        self. time: numpy 1D array
-            Time samples, assumed to be equally sampled
-        self. intensity: numpy 1D array
-            Signal intensity samples
-        ---
-        Returns
-        ---
-        Nothing
+        self.tau_samples, self.interferogram
         """
         pathtofile = os.path.join(self.pathtodata, self.filetoread)
         if os.path.exists(pathtofile):
             #
-            # read data from a csv or a txt file
+            # read data from a csv or a txt file, drop nan values if any
             data = pd.read_csv(pathtofile, delimiter='\t', header=None)
-            #
-            # drop nan values if any
             data.dropna(inplace=True)
-            #
-            # convert to array
             data = np.array(data)
             #
-            # extract time and intensity
-            self.time = data[:, 0]
-            self.intensity = data[:, 1]
+            # extract temporal delay and interferogram samples
+            self.tau_samples = data[:, 0]
+            self.interferogram = data[:, 1]
             #
-            # make sure time is in SI units
-            if self.time_step is None:
-                #
-                if self.get_time_step() >= self.get_time_units(self.time_units):
-                    print("self.get_time_step() ", self.get_time_step())
-                    print("self.get_time_units(self.time_units)", self.get_time_units(self.time_units))
-                    self.time_step = self.get_time_step() * self.get_time_units(self.time_units)
-                    self.time = self.time * self.get_time_units(self.time_units)
+            # make sure tau is in SI units
+            if self.tau_step is None:
+                if self.get_tau_step() >= self.get_tau_units(self.tau_units):
+                    self.tau_step = self.get_tau_step() * self.get_tau_units(self.tau_units)
+                    self.tau_samples = self.tau_samples * self.get_tau_units(self.tau_units)
                 else:
-                    print("self.get_time_step() ", self.get_time_step())
-                    print("self.get_time_units(self.time_units)", self.get_time_units(self.time_units))
-                    self.time_step = self.get_time_step()
+                    self.tau_step = self.get_tau_step()
             else:
-                self.time_step = self.get_time_step() * self.get_time_units(self.time_units)
-                self.time = self.time * self.get_time_units(self.time_units)
+                self.tau_step = self.get_tau_step() * self.get_tau_units(self.tau_units)
+                self.tau_samples = self.tau_samples * self.get_tau_units(self.tau_units)
             #
-            # make sure time samples are sorted in ascending order
+            # make sure tau samples are sorted in ascending order
             # and the corresponding signal values too
-            self.time = np.sort(self.time)
-            self.intensity = np.flip(self.intensity)
+            self.tau_samples = np.sort(self.tau_samples)
+            self.interferogram = np.flip(self.interferogram)
         else:
             raise ValueError("File path does not exist! Please enter a valid path")
 
-    def display(self, vs_wavelength=False, temporal_data=True, wav_min=400, wav_max=800, wav_units="nm"):
+    def display_temporal_and_ft(self, vs_wavelength=False, plot_type="both", wav_min=400, wav_max=800, wav_units="nm"):
         """
-        Plots input data in time and frequency domains
+        Plots interferogram in temporal and frequency domains
         ---
         Parameters
         ---
         vs_wavelength: binary
             if True plots FT amplitude vs. wavelength
             if False plots FT amplitude vs. frequency (default)
-        temporal_data: binary
-            if True, displays both the input interferogram and its Fourier transform
-            if False, only FT of the interferogram is plotted
-            Default is True
+        plot_type: str
+            "both" plots both temporal and frequency domain
+            "temporal" plots only temporal domain
+            "frequency" plots only frequency domain
+            Default is "both"
         wav_min : float
             min wavelength to plot, units set in wav_units
             default is set to the max input freq. value
@@ -140,7 +130,7 @@ class Interferogram(BaseInterferometry):
         Modifies the following class variables:
         ---
         self.ft: numpy 1D array
-             Samples of the discrete  Fourier transform of the signal intensity data
+             Samples of the discrete  Fourier transform of the signal interferogram data
         self.freq: numpy 1D array
             Frequency samples as set by the discrete Fourier transform
         ---
@@ -150,7 +140,7 @@ class Interferogram(BaseInterferometry):
         """
         #
         # FT datatensity
-        self.ft, self.freq = self.ft_data(self.intensity, self.time, self.time_step)
+        self.ft, self.freq = self.ft_data(self.interferogram, self.tau_samples, self.tau_step)
         #
         # get wavelengths samples
         wav = self.convert_to_wavelength()
@@ -169,34 +159,40 @@ class Interferogram(BaseInterferometry):
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft[wav_min_idx:wav_max_idx])
             xlabel = "Wavelength, {}".format(wav_units)
         #
-        if temporal_data is True:
+        if plot_type == "both":
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5),  constrained_layout=True)
-            ax1.plot(self.time, self.intensity)
-            ax1.set_xlabel("Time delay, {}".format(self.time_units))
-            ax1.set_ylabel("Signal intensity, a.u.")
+            ax1.plot(self.tau_samples, self.interferogram)
+            ax1.set_xlabel("Time delay, {}".format(self.tau_units))
+            ax1.set_ylabel("Signal interferogram, a.u.")
             ax2.plot(x, ft_abs)
             ax2.set_xlabel(xlabel)
             ax2.set_ylabel("FT amplitude, a.u.")
-        else:
+        elif plot_type == "frequency":
             fig, ax = plt.subplots(constrained_layout=True)
             ax.plot(x, ft_abs)
             ax.set_xlabel(xlabel)
-        plt.suptitle(self.filetoread[9:-4])
+            ax.set_ylabel("Signal interferogram, a.u.")
+        elif plot_type == "temporal":
+            fig, ax = plt.subplots(constrained_layout=True)
+            ax.plot(self.tau_samples, self.interferogram)
+            ax.set_xlabel("Time delay, {}".format(self.tau_units))
+            ax.set_ylabel("Signal interferogram, a.u.")
+        plt.suptitle(self.filetoread[:-4])
         plt.show()
 
     def display_all(self, vs_wavelength=True, wav_min=None, wav_max=None, wav_units=None):
         """
-        Plots all input data that are contained in a directory in time and frequency domains
+        Plots all interferograms that are contained in a directory in temporal and frequency domains
         """
         for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
             base_name = os.path.basename(f)
             #
             # read interferograms and plot data
-            ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units)
+            ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, tau_units=self.tau_units)
             ifgm.read_data()
-            ifgm.display(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
+            ifgm.display_temporal_and_ft(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
 
-    def display_interferogram_vs_parameter(self, parameter=None, normalizing_width=10e-15, title="Some title"):
+    def display_temporal_vs_parameter(self, parameter=None, normalizing_width=10e-15, title="Some title"):
         """
         Plots the heat maps of all interferograms in a directory 
         as a function of a parameter
@@ -232,32 +228,29 @@ class Interferogram(BaseInterferometry):
                 base_name = os.path.basename(f)
                 #
                 # extract temporal sampling step
-                extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
-                time_step = float(extracted_time_step["step_size"])
-                #if self.time_step is None:
-                #    self.time_step = self.get_time_step() * self.get_time_units(self.time_units)
+                extracted_tau_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)["step_size"]
+                tau_step = float(extracted_tau_step)
                 #
-                # extract parameter values
+                # extract parameter value
                 if parameter == "intrange":
                     extracted_parameter_value = parse("{prefix}-intrange-{parameter_value}-{suffix}.txt", base_name)
                 elif parameter == "power":
                     extracted_parameter_value = parse("{prefix}-power-{parameter_value}-{suffix}.txt", base_name)
                 else:
                     raise ValueError("Parameter must be set to one of : 'intrange', 'power' ! ")
-
                 #
                 parameter_value = float(re.findall(r'\D+|\d+', extracted_parameter_value["parameter_value"])[0])
                 parameter_unit = str(re.findall(r'\D+|\d+', extracted_parameter_value["parameter_value"])[1])
                 parameter_values.append(parameter_value)
                 #
                 # read interferogram and plot data
-                ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
+                ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, tau_units=self.tau_units, tau_step=tau_step)
                 ifgm.read_data()
                 #
                 # normalize and add parameter
-                # by dividing by the mean value far away from time zero
+                # by dividing by the mean value far away from tau zero
                 # and then subtracting 1 to have 0 at backgorund level
-                signal_norm = self.normalize(ifgm.intensity, time_step * self.get_time_units(self.time_units), normalizing_width=normalizing_width)
+                signal_norm = self.normalize(ifgm.interferogram, tau_step * self.get_tau_units(self.tau_units), normalizing_width=normalizing_width)
                 signal_and_parameter.append((parameter_value,  signal_norm))
             #
             # sort by parameter values in descending order so that the signal recorded at the largest parameter is on top
@@ -271,7 +264,7 @@ class Interferogram(BaseInterferometry):
             # plot
             fig, ax = plt.subplots(figsize=(10, 5))
             im = ax.imshow(data_sorted, interpolation=None, 
-                           extent=(ifgm.time[0] - ifgm.time_step / 2, ifgm.time[-1] + ifgm.time_step / 2, 0, 1),
+                           extent=(ifgm.tau[0] - ifgm.tau_step / 2, ifgm.tau[-1] + ifgm.tau_step / 2, 0, 1),
                            cmap = plt.get_cmap("bwr"), vmin = data_sorted.min(), vmax = data_sorted.max(), norm=MidpointNormalize(midpoint=0)) #
             # set the ticks and ticks labels (0,1 is because I set 0,1 in imshow(extent=(...0,1))
             ticks = np.linspace(0, 1, len(parameter_values))
@@ -279,7 +272,7 @@ class Interferogram(BaseInterferometry):
             print(ticklabels)
             ax.set_yticks(ticks)
             ax.set_yticklabels(ticklabels)
-            ax.set_xlabel("Temporal delay, {}".format(self.time_units))
+            ax.set_xlabel("Temporal delay, {}".format(self.tau_units))
             ax.set_ylabel(parameter_names[parameter] + ", " + parameter_unit)
             ax.set_title(title)
             ax.set_aspect('auto')
@@ -289,7 +282,7 @@ class Interferogram(BaseInterferometry):
             cax = divider.append_axes('right', size='5%', pad=0.05)
             clb = fig.colorbar(im, cax=cax, orientation='vertical')
             clb.ax.get_yaxis().labelpad = 15
-            clb.ax.set_ylabel("Interferogram's intensity, a.u.", rotation=270)
+            clb.ax.set_ylabel("Interferogram's interferogram, a.u.", rotation=270)
             plt.show()
 
         else:
@@ -297,7 +290,7 @@ class Interferogram(BaseInterferometry):
 
     def display_ft_vs_parameter(self, parameter=None, wav_fund=800e-9, log_scale=False, title="Some title"):
         """
-        Plots all data in a directory as intensity heat maps
+        Plots all data in a directory as interferogram heat maps
         as a function of a parameter
         ---
         Parameters
@@ -335,8 +328,8 @@ class Interferogram(BaseInterferometry):
                 base_name = os.path.basename(f)
                 #
                 # extract temporal sampling step
-                extracted_time_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
-                time_step = float(extracted_time_step["step_size"])
+                extracted_tau_step = parse("{prefix}-step-{step_size}fs-{suffix}.txt", base_name)
+                tau_step = float(extracted_tau_step["step_size"])
                 #
                 # extract parameter values
                 if parameter == "intrange":
@@ -351,11 +344,11 @@ class Interferogram(BaseInterferometry):
                 parameter_values.append(parameter_value)
                 #
                 # read interferogram and plot data
-                ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, time_units=self.time_units, time_step=time_step)
+                ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, tau_units=self.tau_units, tau_step=tau_step)
                 ifgm.read_data()
                 #
                 # FT the signal and normalise it by its max value
-                ft, freq = self.ft_data(ifgm.intensity, ifgm.time, time_step * self.get_time_units(self.time_units))
+                ft, freq = self.ft_data(ifgm.interferogram, ifgm.tau, tau_step * self.get_tau_units(self.tau_units))
                 signal_and_parameter.append((parameter_value, np.abs(np.array(ft)) / np.max(np.abs(np.array(ft)))))
             #
             # sort by parameter values in descending order so that the signal recorded at the largest parameter is on top
@@ -397,27 +390,30 @@ class Interferogram(BaseInterferometry):
         else:
             raise ValueError("Parameter cannot be None!")
 
-    def normalize_interferogram(self, normalizing_width=10e-15, start_at=None):
+    def normalize_interferogram(self, normalizing_width=10e-15, t_norm_start=None):
         """
-        Normalizes interferogram
+        Normalizes interferogram data
         ---
         Parameters
         ---
         normalizing_width: float, optional
             the width of integration range to be used for signals' normalization, in seconds
+        t_norm_start: float
+            the start time of the integration range to be used for normalization, in seconds
         ---
         Return
         ---
         Normalized interferogram
         """
-        if start_at is not None:
-            self.intensity = self.normalize(self.intensity, self.time_step, self.time, normalizing_width=normalizing_width, start_at=start_at)
+        if t_norm_start is not None:
+            self.interferogram = self.normalize(self.interferogram, self.tau_step, self.tau_samples,
+                                            normalizing_width=normalizing_width, t_norm_start=t_norm_start)
         else:
             raise ValueError("starting value start_at cannot be none! ")
 
     def compute_spectrogram_of_interferogram(self, nperseg=2**6, plotting=False, **kwargs):
         """
-        Computes and displays experimental spectrogram
+        Computes and displays experimental spectrogram by short time Fourier transform
         ---
         Parameters
         ---
@@ -427,29 +423,38 @@ class Interferogram(BaseInterferometry):
             If True, generates a plot of the spectrogram
             Default: False
         """
-        self.compute_spectrogram(self.intensity, self.time_step, nperseg=nperseg, plotting=plotting, **kwargs)
+        self.compute_spectrogram(self.interferogram, self.tau_step, nperseg=nperseg, plotting=plotting, **kwargs)
 
-    def gen_g2_interferogram(self, plotting=False):
-        #
-        # iniitalise g2
-        self.g2 = np.zeros(len(self.time))
-        #
-        # initialise electric field and its envelope at delay = 0
-        e_t = np.sqrt(self.intensity)
-        #
-        # compute the g2
-        for idx, delay in enumerate(self.tau_samples):
-            #
-            # compute the field and its envelope at current delay
-            e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
-            #
-            # compute an interferogram value at current delay
-            self.g2[idx] = np.real(np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau)) / np.mean((e_t * np.conj(e_t))**2))
+    def gen_g2(self, filter_cutoff=30e12, filter_order=6, plotting=False):
+        """
+        Compute the second order correlation function from the experimental interferogram
+        ---
+        Args:
+        ---
+        filter_cutoff: float, optional
+            The cutoff frequency of the filter, in Hz
+            Default is 30e12
+        filter_order: int, optional
+            The order of the filter, Default is 6
+        plotting: bool, optional
+            If True, displays a plot of the computed g2
+        ---
+        Modifies:
+        ---
+        self.g2: 1D array of floats
+            Samples of the g2 computed from the experimental interferogram
+        """
+        if self.interferogram.any() and self.tau_step.any() is not None:
+            # compute the g2
+            self.g2 = self.compute_g2(self.interferogram, self.tau_step, filter_cutoff=filter_cutoff, filter_order=filter_order)
+        else:
+            raise ValueError("Temporal delay sample and interferogram samples cannot be None!")
         #
         if plotting:
             fig, ax = plt.subplots(1, figsize=(15, 5))
             ax.plot(self.tau_samples, self.g2)
             ax.set_xlabel("Time, s")
+            plt.title("g2")
             plt.show()
 
     def convert_to_wavelength(self):
@@ -465,12 +470,12 @@ class Interferogram(BaseInterferometry):
         wav = 3e8 / self.freq
         return wav
 
-    def get_time_step(self):
+    def get_tau_step(self):
         """
-        Get a step from experimental time_samples
+        Get a step from experimental tau_samples
         It is assumed that the samples are equally sampled!
         """
-        return np.abs(self.time[1] - self.time[0])
+        return np.abs(self.tau_samples[1] - self.tau_samples[0])
 
     @staticmethod
     def get_wavelength_units(units):
@@ -509,38 +514,39 @@ class Interferogram(BaseInterferometry):
         return wav_min_idx, wav_max_idx
 
     @staticmethod
-    def get_time_units(units):
+    def get_tau_units(units):
         """
         Converts temporal units in string format to a float number
         ---
         Return
         ---
-        time_units: float
+        tau_units: float
             Time unit as a float number
         """
         units_dict = {"ps": 1e-12, "fs": 1e-15, "as": 1e-18}
         if units in units_dict:
-            time_units = units_dict[units]
+            tau_units = units_dict[units]
         else:
             raise ValueError("Only the following units are allowed: {}".format(list(units_dict.keys())))
-        return time_units
+        return tau_units
 
     @staticmethod
-    def ft_data(intensity, time, time_step):
+    def ft_data(interferogram, tau, tau_step):
         """
         Computes the Fourier transform of an input sequence
-        and the corresponding frequency samples, given the signal intensity samples, temporal samples and a discretization step
+        and the corresponding frequency samples, given the signal interferogram samples,
+        temporal samples and a discretization step
         ---
         Parameters
         ---
-        intensity: numpy 1D array
-            Signal intensity samples
-        time: numpy 1D array
+        interferogram: numpy 1D array
+            Signal interferogram samples
+        tau: numpy 1D array
             Time samples
             Assumed to be equally sampled
             Default is None
-        time_step: float
-            Discretization step at which the time samples were recorded
+        tau_step: float
+            Discretization step at which the tau samples were recorded
             Default is None
         ---
         Return
@@ -554,8 +560,8 @@ class Interferogram(BaseInterferometry):
         """
         #
         # begin from 1st element to avoid displaying the zero-th freq. component
-        ft = np.fft.rfft(intensity)[1:]
-        freq = np.fft.rfftfreq(len(time), time_step)[1:]
+        ft = np.fft.rfft(interferogram)[1:]
+        freq = np.fft.rfftfreq(len(tau), tau_step)[1:]
         return ft, freq
 
     def sort_list_of_tuples(self, list_of_tuples, sort_by_idx=0, reverse=False):
@@ -585,7 +591,7 @@ class Interferogram(BaseInterferometry):
 
 class MidpointNormalize(colors.Normalize):
     """
-    Adjust colorbar values to by symmetric with respect to zero
+    Adjust color values to be symmetric with respect to zero
     """
     def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
         self.midpoint = midpoint

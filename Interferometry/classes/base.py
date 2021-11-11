@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.signal import stft
+from scipy.signal import stft, butter, filtfilt
 import tftb
 
 
@@ -19,7 +19,7 @@ class BaseInterferometry:
         """
         Compute a spectrogram of a time-series signal by short time Fourier transform (STFT)
         ---
-        Parameters
+        Args:
         ---
         signal: a 1D numpy array of floats
             time series to compute the spectrogram of
@@ -32,7 +32,7 @@ class BaseInterferometry:
             If True, generates a plot of the spectrogram
             Default: False
         ---
-        Return
+        Returns:
         ---
         signal_stft: ndarray
             STFT of signal
@@ -73,14 +73,14 @@ class BaseInterferometry:
         """
         Compute Wigner-Ville distribution (time-frequency representation) of a time-series signal
         ---
-        Parameters
+        Args:
         ---
         time_samples: ndarray
             Array of time domain samples
         signal: ndarray
             timer series to compute the WVD of
         ---
-        Return
+        Returns:
         ---
         signal_stft: ndarray
             STFT of signal
@@ -132,20 +132,22 @@ class BaseInterferometry:
 
     def normalize(self, signal, time_step, time_samples, normalizing_width=10e-15, t_norm_start=None):
         """
-        Normalizes an interferogram
+        Normalizes an interferogram by subtracting the mean value of the signal and normalizing it to have a 1 : 8 ratio
         ---
-        Parameters
+        Args:
         ---
-        signal: ndarray
+        signal: 1d ndarray
             timer series to normalize
         time_step:
             temporal step the signal was recorded at
         normalizing_width: float, optional
-            the width of integration range to be used for signals' mormalization, in seconds
+            the width of integration range to be used for signals' normalization, in seconds
+        t_norm_start: float
+            the start time of the normalization window, in seconds
         ---
-        Return
+        Returns:
         ---
-        signal_norm: ndarray
+        signal_norm: 1d ndarray
             normalized signal
         """
         if t_norm_start is not None:
@@ -158,54 +160,76 @@ class BaseInterferometry:
             # and normalize the signal to have 1:8 ratio
             signal_mean_bg = np.mean(np.abs(np.array(signal[idx_norm_start : idx_norm_range + idx_norm_start])))
             signal -= signal_mean_bg
-            signal -= - signal.min()
+            signal -= signal.min()
             signal = 8 * signal / signal.max()
         else:
             raise ValueError("starting value t_norm_start cannot be none! ")
         return signal
 
-    def gen_g2(self, time_samples, plotting=False):
+    def low_pass_filter(self, signal, time_step, filter_cutoff=30e12, filter_order=6):
         """
-        Generates the second order correlation function of the input signal
+        Filters an interferogram by using a butterworth filter
         ---
-        Parameters
+        Args:
         ---
-        signal: ndarray
-            timer series to normalize
+        signal: 1d ndarray
+            timer series to filter
         time_step:
             temporal step the signal was recorded at
-        normalizing_width: float, optional
-            the width of integration range to be used for signals' mormalization, in seconds
+        filter_cutoff: float, optional
+            the cutoff frequency of the filter, in Hz
+        filter_order: int, optional
+            the order of the filter
         ---
-        Return
+        Returns:
         ---
-        signal_norm: ndarray
-            normalized signal
+        signal_filtered: 1d ndarray
+            filtered signal
+        ft_freq: 1d ndarray
+            frequency samples of the filtered signal
         """
         #
-        # iniitalise g2
-        g2 = np.zeros(len(time_samples))
+        # compute the filter's cutoff frequency
+        freq_critical = filter_cutoff * 2 * time_step
         #
-        # initialise electric field and its envelope at delay = 0
-        e_t, a_t = self.gen_e_field(delay=0)
+        # filter the signal
+        b, a = butter(filter_order, freq_critical, btype='lowpass')
+        signal_filtered = filtfilt(b, a, signal)
         #
-        # compute the g2
-        for idx, delay in enumerate(time_samples):
-            #
-            # compute the field and its envelope at current delay
-            e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
-            #
-            # compute an interferogram value at current delay
-            g2[idx] = np.mean(np.conj(e_t) * np.conj(e_t_tau) * e_t_tau * e_t) / np.mean((np.conj(e_t) * e_t)**2)
-        #self.g2 /= np.mean(self.g2[1500:2500])
-        #
-        if plotting:
-            fig, ax = plt.subplots(1, figsize=(15, 5))
-            ax.plot(time_samples, g2)
-            ax.set_xlabel("Time, s")
-            plt.show()
+        return signal_filtered
 
-    def ft_data(self, intensity, time, time_step):
+    def compute_g2(self, signal, time_step, filter_cutoff=30e12, filter_order=6):
+
+        """
+        Computes the second order correlation function
+
+        ---
+        Args:
+        ---
+        signal: 1d ndarray
+            timer series to filter
+        time_step:
+            temporal step the signal was recorded at
+        filter_cutoff: float, optional
+            the cutoff frequency of the filter, in Hz
+        filter_order: int, optional
+            the order of the filter
+        ---
+        Returns:
+        ---
+        g2: 1d ndarray
+            Second order correlation function
+        """
+        #
+        # low-pass filter the input signal
+        #
+        signal_filtered = self.low_pass_filter(signal, time_step, filter_cutoff=filter_cutoff, filter_order=filter_order)
+        # Subtract the bcakgorund and divide by 2 to get the correlation function
+        g2 = (signal_filtered - 1) / 2
+
+        return g2
+
+    def ft_data(self, intensity, time_samples, time_step):
         """
         Computes the Fourier transform of an input sequence
         and the corresponding frequency samples, given the signal intensity samples, temporal samples and a discretization step
@@ -214,7 +238,7 @@ class BaseInterferometry:
         ---
         intensity: numpy 1D array
             Signal intensity samples
-        time: numpy 1D array
+        time_samples: numpy 1D array
             Time samples
             Assumed to be equally sampled
             Default is None
@@ -234,10 +258,20 @@ class BaseInterferometry:
         #
         # begin from 1st element to avoid displaying the zero-th freq. component
         ft = np.fft.rfft(intensity)[1:]
-        freq = np.fft.rfftfreq(len(time), time_step)[1:]
+        freq = np.fft.rfftfreq(len(time_samples), time_step)[1:]
         return ft, freq
 
     def plot_data(self, time_samples, signal):
+        """
+        Plots the input signal vs time
+        ---
+        Args:
+        ---
+        time_samples: 1d numpy array
+            Time samples in femtoseconds
+        signal: 1d numpy array
+            Signal intensity samples
+        """
         fig, ax = plt.subplots(1, figsize=(15, 5))
         ax.plot(time_samples * 10e15, signal)
         ax.set_xlabel("Time, fs")
