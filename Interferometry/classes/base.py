@@ -50,7 +50,7 @@ class BaseInterferometry:
         signal_stft = np.fft.fftshift(signal_stft, axes=0)
         f_stft_samples = np.fft.fftshift(f_stft_samples)
         #
-        # generate frequency and time steps - must be replaced by  base class variables!
+        # generate frequency and time steps - must be replaced by base class variables!
         df1 = f_stft_samples[1] - f_stft_samples[0]
         dt = t_stft_samples[1] - t_stft_samples[0]
         #
@@ -224,10 +224,55 @@ class BaseInterferometry:
         # low-pass filter the input signal
         #
         signal_filtered = self.low_pass_filter(signal, time_step, filter_cutoff=filter_cutoff, filter_order=filter_order)
-        # Subtract the bcakgorund and divide by 2 to get the correlation function
+        # Subtract the background and divide by 2 to get the correlation function
         g2 = (signal_filtered - 1) / 2
 
         return g2
+
+    def plot_g2_vs_cutoff_freq(self, signal, time_samples, time_step,
+                                  filter_cutoff_range=np.linspace(1e12, 30e12, 10),
+                                  filter_order=np.linspace(1, 6, 6),
+                                  g2_min = 0.95, g2_max = 1.05,
+                                  to_plot = True):
+        """
+        Computes the second-order correlation function as a function of the filter's cut-off frequency
+        """
+
+        for fo in filter_order:
+            # initialise a list to keep g2 at each filter cutoff frequency
+            g2_vs_freq = []
+            #
+            # loop over the filter cutoff frequencies
+            for fc in filter_cutoff_range:
+                g2 = self.compute_g2(signal, time_step, filter_cutoff=fc, filter_order=fo)
+                #
+                # threshold from below and append
+                g2[g2.max()<g2_min] = -1
+                g2_vs_freq.append(g2)
+            g2_vs_freq = np.array(g2_vs_freq)
+            # threshold from above
+            g2_vs_freq[g2_vs_freq>g2_max] = -1
+            #
+            #plot
+            if to_plot:
+                plt.subplots(1, figsize=(15, 5))
+                plt.imshow(g2_vs_freq, aspect='auto',
+                           cmap=plt.get_cmap("viridis"), vmin=0, vmax=1,
+                           extent=(min(time_samples), max(time_samples),
+                                   min(filter_cutoff_range), max(filter_cutoff_range)))
+                plt.title("Filter order = {}".format(fo))
+                plt.colorbar()
+                plt.show()
+
+        return g2_vs_freq
+
+
+
+
+
+
+
+
 
     def ft_data(self, intensity, time_samples, time_step):
         """
