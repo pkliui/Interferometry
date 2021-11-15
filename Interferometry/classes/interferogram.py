@@ -457,6 +457,30 @@ class Interferogram(BaseInterferometry):
             plt.title("g2")
             plt.show()
 
+    def gen_g2_vs_cutoff_freq(self, cutoff_min = 1e12, cutoff_max = 30e12, cutoff_step = 1e12,
+                              order_min = 1, order_max = 6, order_step = 1,
+                              g2_min = 0.95, g2_max = 1.05,
+                              to_plot = True):
+        """
+        Compute the second order correlation function from the experimental interferogram
+        for different cutoff frequencies and orders of the Butterworth filter
+        :param cutoff_min:
+        :param cutoff_max:
+        :param cutoff_step:
+        :param order_min:
+        :param order_max:
+        :param order_step:
+        :param g2_min:
+        :param g2_max:
+        :param to_plot:
+        :return:
+        """
+        self.plot_g2_vs_cutoff_freq(self.interferogram, self.tau_samples, self.tau_step,
+                              filter_cutoff_range=np.linspace(cutoff_min, cutoff_max, 1+int((cutoff_max - cutoff_min)/cutoff_step)),
+                              filter_order=np.linspace(order_min, order_max, 1+int(abs((order_max - order_min))/order_step)),
+                              g2_min = g2_min, g2_max = g2_max, to_plot = to_plot)
+
+
     def convert_to_wavelength(self):
         """
         Converts frequency samples to wavelength samples
