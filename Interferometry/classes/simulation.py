@@ -312,9 +312,9 @@ class Simulation(BaseInterferometry):
         g2_vs_freq: 2d ndarray
             The second order correlation function as a function of the filter's cut-off frequency
         """
-        g2_vs_freq = self.compute_g2_vs_cutoff(self.interferogram, self.tau_samples, self.tau_step,
+        g2_vs_cutoff = self.compute_g2_vs_cutoff(self.interferogram, self.tau_samples, self.tau_step,
                                     cutoff_min=cutoff_min, cutoff_max=cutoff_max, cutoff_step=cutoff_step,
                                     order_min=order_min, order_max=order_max, order_step=order_step,
                                     g2_min=g2_min, g2_max=g2_max, to_plot=to_plot)
 
-        return g2_vs_freq
+        return g2_vs_cutoff
