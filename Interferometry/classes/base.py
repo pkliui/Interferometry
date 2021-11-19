@@ -291,10 +291,12 @@ class BaseInterferometry:
                 g2 = self.compute_g2(signal, time_step, filter_cutoff=fc, filter_order=fo)
                 #
                 # threshold from below and append
+                # if max g2 value is below the minimum, set all values of g2 to -1
                 g2[g2.max()<g2_min] = -1
                 g2_vs_freq.append(g2)
             g2_vs_freq = np.array(g2_vs_freq)
             # threshold from above
+            # set g2 at time delays where the maximum value of g2 is above g2_max to -1
             g2_vs_freq[g2_vs_freq>g2_max] = -1
             #
             #plot
