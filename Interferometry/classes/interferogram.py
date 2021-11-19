@@ -11,6 +11,10 @@ import matplotlib.colors as colors
 from Interferometry.classes.base import BaseInterferometry
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
 class Interferogram(BaseInterferometry):
     """
     class for 1D interferometric data
@@ -457,29 +461,57 @@ class Interferogram(BaseInterferometry):
             plt.title("g2")
             plt.show()
 
-    def gen_g2_vs_cutoff_freq(self, cutoff_min = 1e12, cutoff_max = 30e12, cutoff_step = 1e12,
+    def gen_g2_vs_cutoff(self, cutoff_min = 1e12, cutoff_max = 30e12, cutoff_step = 1e12,
                               order_min = 1, order_max = 6, order_step = 1,
                               g2_min = 0.95, g2_max = 1.05,
                               to_plot = True):
         """
         Compute the second order correlation function from the experimental interferogram
         for different cutoff frequencies and orders of the Butterworth filter
-        :param cutoff_min:
-        :param cutoff_max:
-        :param cutoff_step:
-        :param order_min:
-        :param order_max:
-        :param order_step:
-        :param g2_min:
-        :param g2_max:
-        :param to_plot:
-        :return:
-        """
-        self.plot_g2_vs_cutoff_freq(self.interferogram, self.tau_samples, self.tau_step,
-                              filter_cutoff_range=np.linspace(cutoff_min, cutoff_max, 1+int((cutoff_max - cutoff_min)/cutoff_step)),
-                              filter_order=np.linspace(order_min, order_max, 1+int(abs((order_max - order_min))/order_step)),
-                              g2_min = g2_min, g2_max = g2_max, to_plot = to_plot)
+        ---
+        Args:
+        ---
+        signal: 1d ndarray
+            Signal to be filtered
+        time_samples: 1d ndarray
+            Time samples of the signal
+        time_step: float
+            Temporal step of the signal
+        cutoff_min: float, optional
+            The minimum cutoff frequency of the filter, in Hz
+            Default is 1e12
+        cutoff_max: float, optional
+            The maximum cutoff frequency of the filter, in Hz
+            Default is 30e12
+        cutoff_step: float, optional
+            The step of the cutoff frequency of the filter, in Hz
+            Default is 1e12
+        order_min: int, optional
+            The minimum order of the filter, Default is 1
+        order_max: int, optional
+            The maximum order of the filter, Default is 6
+        order_step: int, optional
+            The step of the order of the filter, Default is 1
+        g2_min: float, optional
+            If the maximum value of the computed g2 is below this value, the whole g2 distribution is set to -1
+            Default is 0.95
+        g2_max: float, optional
+            Pixel values of the computed g2 that exceed g2_max are set to -1
+            Default is 1.05
+        to_plot: bool, optional
+            If True, the g2 distribution is plotted
+        ---
+        Returns:
+        ---
+        g2_vs_freq: 2d ndarray
+            The second order correlation function as a function of the filter's cut-off frequency
 
+        """
+        g2_vs_cutoff = self.compute_g2_vs_cutoff(self.interferogram, self.tau_samples, self.tau_step,
+                                    cutoff_min=cutoff_min, cutoff_max=cutoff_max, cutoff_step=cutoff_step,
+                                    order_min=order_min, order_max=order_max, order_step=order_step,
+                                    g2_min=g2_min, g2_max=g2_max, to_plot=to_plot)
+        return g2_vs_cutoff
 
     def convert_to_wavelength(self):
         """
@@ -605,12 +637,116 @@ class Interferogram(BaseInterferometry):
             If False - in descending.
             Default is True
         """
-
         # sort by the parameter_value
         # signal_and_parameter.sort(key=operator.itemgetter(1))
         list_of_tuples.sort(key=lambda x: x[sort_by_idx], reverse=reverse)
         # split it back into sorted
         return zip(*list_of_tuples)
+
+    def plot_cross_section_wvd(self, tpa_freq=3e8 / 440e-9, vmin=-550, vmax=550):
+        """
+        Plots the cross-section of the WVD
+        """
+        #
+        # plot the cross-section of the WVD
+        plt.figure(figsize=(8, 6))
+        signal_wvd, t_wvd_samples, f_wvd_samples = self.compute_wigner_ville_distribution(self.tau_samples, self.interferogram, plotting=True, vmin=vmin, vmax=vmax)
+        # get the index of the frequency closest to the tpa_freq
+        tpa_idx = np.where((abs(tpa_freq - self.freq) < abs(self.freq[1] - self.freq[0])))[0][0]
+
+        print(tpa_idx)
+
+
+
+        tpa_idx_low = int(len(self.freq)/2) + tpa_idx-1
+        tpa_idx_high = int(len(self.freq)/2) + tpa_idx+1
+        signal_wvd_tpa = np.zeros(signal_wvd.shape)
+        signal_wvd_tpa[tpa_idx_low:tpa_idx_high, :] = signal_wvd[tpa_idx_low:tpa_idx_high, :]
+
+
+        plt.plot(signal_wvd_tpa.sum(axis=0))
+        plt.show()
+
+        plt.plot(signal_wvd_tpa.sum(axis=1))
+        plt.show()
+
+        delta_f = f_wvd_samples[1] - f_wvd_samples[0]
+        f, axx = plt.subplots(1)
+        im = axx.imshow(signal_wvd_tpa,
+                        aspect='auto', origin='lower',
+                        extent=(self.tau_samples[0] - self.tau_step / 2, self.tau_samples[-1] + self.tau_step / 2,
+                                f_wvd_samples[0] - delta_f / 2, f_wvd_samples[-1] + delta_f / 2),
+                        cmap = plt.get_cmap("viridis"), vmin=-1, vmax=1)
+
+        axx.set_ylabel('frequency [Hz]')
+        plt.colorbar(im, ax=axx)
+        axx.set_title("amplitude of Wigner-Ville distr.")
+        plt.show()
+
+
+    def plot_cross_section_stft(self, tpa_freq=3e8 / 440e-9, nperseg=2**5):
+        """
+        Plots the cross-section of the spectrogram
+        """
+        #
+        # plot the cross-section of the WVD
+        plt.figure(figsize=(8, 6))
+        signal_stft, t_stft_samples, f_stft_samples = self.compute_spectrogram(self.interferogram, self.tau_step,
+                                                                               nperseg=nperseg, plotting=True)
+        # get the index of the frequency closest to the tpa_freq
+        tpa_idx = np.where((abs(tpa_freq - self.freq) < abs(self.freq[1] - self.freq[0])))[0][0]
+        print(tpa_idx)
+        # because of the sampling peculiarities of stft, we need to shift the index by scaling it
+        tpa_idx = int(tpa_idx * 0.5 * nperseg / len(self.freq))
+
+        print(tpa_idx)
+        print("len(self.freq) ", len(self.freq))
+
+        tpa_idx_low = int(len(f_stft_samples)/2) + int(tpa_idx)-5
+        tpa_idx_high = int(len(f_stft_samples)/2) + int(tpa_idx)+5
+
+        print(tpa_idx_low)
+        print(tpa_idx_high)
+
+        print("len(signal_stft) ", signal_stft.shape)
+
+
+        signal_stft_tpa = np.zeros(signal_stft.shape)
+
+        print("len(signal_stft_tpa) ", signal_stft_tpa.shape)
+
+
+        signal_stft_tpa[tpa_idx_low:tpa_idx_high, :] = signal_stft[tpa_idx_low:tpa_idx_high, :]
+
+        print("len(signal_stft_tpa) ", signal_stft_tpa.shape)
+
+        plt.plot(signal_stft_tpa.sum(axis=0))
+        plt.show()
+
+        plt.plot(signal_stft_tpa.sum(axis=1))
+        plt.show()
+
+        #
+        df1 = f_stft_samples[1] - f_stft_samples[0]
+        # f, axx = plt.subplots(1)
+        # im = axx.imshow(np.abs(signal_stft_tpa),
+        #                 interpolation=None, origin='lower', aspect="auto",
+        #                 extent=(self.tau_samples[0] - self.tau_step / 2, self.tau_samples[-1] + self.tau_step / 2,
+        #                         f_stft_samples[0] - df1 / 2, f_stft_samples[-1] + df1 / 2),
+        #                 cmap="viridis")
+        # axx.set_ylabel('frequency [Hz]')
+        # plt.colorbar(im, ax=axx)
+        # axx.set_title('spectrogram - amplitude of STFT')
+        # plt.show()
+
+        fig, ax = plt.subplots()
+        #signal_stft_tpa = np.ma.masked_where(signal_stft_tpa == 0, signal_stft_tpa)
+        ax.imshow(np.abs(signal_stft_tpa), cmap=cm.gray)
+        ax.imshow(np.abs(signal_stft), cmap=cm.jet, interpolation='none')
+        plt.show()
+
+        print("hez ")
+
 
 
 class MidpointNormalize(colors.Normalize):
