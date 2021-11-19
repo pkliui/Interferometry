@@ -42,10 +42,9 @@ class BaseInterferometry:
             Array of frequency samples
         """
         #
-        # first looking at the power of the short time fourier transform (SFTF):
+        # compute the short time fourier transform (SFTF):
         f_stft_samples, t_stft_samples, signal_stft = stft(signal, 1/time_step, nperseg=nperseg,
                                                            noverlap=nperseg-1, return_onesided=False, **kwargs)
-        #
         # shift the frequency axis
         signal_stft = np.fft.fftshift(signal_stft, axes=0)
         f_stft_samples = np.fft.fftshift(f_stft_samples)
@@ -66,6 +65,7 @@ class BaseInterferometry:
             axx.set_ylabel('frequency [Hz]')
             plt.colorbar(im, ax=axx)
             axx.set_title('spectrogram - amplitude of STFT')
+            plt.show()
         #
         return signal_stft, t_stft_samples, f_stft_samples
 
@@ -127,8 +127,10 @@ class BaseInterferometry:
                  axx.set_ylabel('frequency [Hz]')
                  plt.colorbar(im, ax=axx)
                  axx.set_title("amplitude of Wigner-Ville distr.")
+                 plt.show()
         else:
             raise ValueError("Time_samples and signal must have the same length!")
+        return signal_wvd, t_wvd_samples, f_wvd_samples
 
     def normalize(self, signal, time_step, time_samples, normalizing_width=10e-15, t_norm_start=None):
         """
@@ -229,19 +231,61 @@ class BaseInterferometry:
 
         return g2
 
-    def plot_g2_vs_cutoff_freq(self, signal, time_samples, time_step,
-                                  filter_cutoff_range=np.linspace(1e12, 30e12, 10),
-                                  filter_order=np.linspace(1, 6, 6),
-                                  g2_min = 0.95, g2_max = 1.05,
-                                  to_plot = True):
+    def compute_g2_vs_cutoff(self, signal, time_samples, time_step,
+                               cutoff_min=1e12, cutoff_max=30e12, cutoff_step=1e12,
+                               order_min=1, order_max=6, order_step=1,
+                               g2_min=0.95, g2_max=1.05,
+                               to_plot=True):
         """
         Computes the second-order correlation function as a function of the filter's cut-off frequency
+        ---
+        Args:
+        ---
+        signal: 1d ndarray
+            Signal to be filtered
+        time_samples: 1d ndarray
+            Time samples of the signal
+        time_step: float
+            Temporal step of the signal
+        cutoff_min: float, optional
+            The minimum cutoff frequency of the filter, in Hz
+            Default is 1e12
+        cutoff_max: float, optional
+            The maximum cutoff frequency of the filter, in Hz
+            Default is 30e12
+        cutoff_step: float, optional
+            The step of the cutoff frequency of the filter, in Hz
+            Default is 1e12
+        order_min: int, optional
+            The minimum order of the filter, Default is 1
+        order_max: int, optional
+            The maximum order of the filter, Default is 6
+        order_step: int, optional
+            The step of the order of the filter, Default is 1
+        g2_min: float, optional
+            If the maximum value of the computed g2 is below this value, the whole g2 distribution is set to -1
+            Default is 0.95
+        g2_max: float, optional
+            Pixel values of the computed g2 that exceed g2_max are set to -1
+            Default is 1.05
+        to_plot: bool, optional
+            If True, the g2 distribution is plotted
+        ---
+        Returns:
+        ---
+        g2_vs_freq: 2d ndarray
+            The second order correlation function as a function of the filter's cut-off frequency
         """
-
+        #
+        # range of cutoff frequencies to test
+        filter_cutoff_range = np.linspace(cutoff_min, cutoff_max, int(abs(cutoff_max - cutoff_min)/cutoff_step))
+        # range of orders to test
+        filter_order = np.linspace(order_min, order_max, 1 + int(abs(order_max - order_min)/order_step))
+        #
         for fo in filter_order:
+            #
             # initialise a list to keep g2 at each filter cutoff frequency
             g2_vs_freq = []
-            #
             # loop over the filter cutoff frequencies
             for fc in filter_cutoff_range:
                 g2 = self.compute_g2(signal, time_step, filter_cutoff=fc, filter_order=fo)
@@ -255,24 +299,18 @@ class BaseInterferometry:
             #
             #plot
             if to_plot:
-                plt.subplots(1, figsize=(15, 5))
+                fig, ax = plt.subplots(1, figsize=(15, 5))
                 plt.imshow(g2_vs_freq, aspect='auto',
                            cmap=plt.get_cmap("viridis"), vmin=0, vmax=1,
                            extent=(min(time_samples), max(time_samples),
                                    min(filter_cutoff_range), max(filter_cutoff_range)))
                 plt.title("Filter order = {}".format(fo))
+                ax.set_xlabel("Time, s")
+                ax.set_ylabel("Cut-off frequency, Hz")
                 plt.colorbar()
                 plt.show()
 
         return g2_vs_freq
-
-
-
-
-
-
-
-
 
     def ft_data(self, intensity, time_samples, time_step):
         """
