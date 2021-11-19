@@ -1,5 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.optimize import minimize
+
 
 from Interferometry.classes.base import BaseInterferometry
 
@@ -229,6 +231,7 @@ class Simulation(BaseInterferometry):
             fig, ax = plt.subplots(1, figsize=(15, 5))
             ax.plot(self.tau_samples, self.g2_analytical)
             ax.set_xlabel("Time, s")
+            plt.grid()
             plt.show()
 
     def gen_g2(self, filter_cutoff=30e12, filter_order=6, plotting=False):
@@ -261,6 +264,57 @@ class Simulation(BaseInterferometry):
             ax.plot(self.tau_samples, self.g2)
             ax.set_xlabel("Time, s")
             plt.title("g2")
+            plt.grid()
             plt.show()
 
+    def gen_g2_vs_cutoff(self, cutoff_min=1e12, cutoff_max = 30e12, cutoff_step = 1e12,
+                              order_min = 1, order_max = 6, order_step = 1,
+                              g2_min = 0.95, g2_max = 1.05,
+                              to_plot = True):
+        """
+        Compute the second order correlation function from the experimental interferogram
+        for different cutoff frequencies and orders of the Butterworth filter
+        ---
+        Args:
+        ---
+        signal: 1d ndarray
+            Signal to be filtered
+        time_samples: 1d ndarray
+            Time samples of the signal
+        time_step: float
+            Temporal step of the signal
+        cutoff_min: float, optional
+            The minimum cutoff frequency of the filter, in Hz
+            Default is 1e12
+        cutoff_max: float, optional
+            The maximum cutoff frequency of the filter, in Hz
+            Default is 30e12
+        cutoff_step: float, optional
+            The step of the cutoff frequency of the filter, in Hz
+            Default is 1e12
+        order_min: int, optional
+            The minimum order of the filter, Default is 1
+        order_max: int, optional
+            The maximum order of the filter, Default is 6
+        order_step: int, optional
+            The step of the order of the filter, Default is 1
+        g2_min: float, optional
+            If the maximum value of the computed g2 is below this value, the whole g2 distribution is set to -1
+            Default is 0.95
+        g2_max: float, optional
+            Pixel values of the computed g2 that exceed g2_max are set to -1
+            Default is 1.05
+        to_plot: bool, optional
+            If True, the g2 distribution is plotted
+        ---
+        Returns:
+        ---
+        g2_vs_freq: 2d ndarray
+            The second order correlation function as a function of the filter's cut-off frequency
+        """
+        g2_vs_freq = self.compute_g2_vs_cutoff(self.interferogram, self.tau_samples, self.tau_step,
+                                    cutoff_min=cutoff_min, cutoff_max=cutoff_max, cutoff_step=cutoff_step,
+                                    order_min=order_min, order_max=order_max, order_step=order_step,
+                                    g2_min=g2_min, g2_max=g2_max, to_plot=to_plot)
 
+        return g2_vs_freq
