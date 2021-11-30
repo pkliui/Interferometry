@@ -16,15 +16,15 @@ Simulations include:
 
 The software was tested using the following versions of the packages:
 
-*ddt=1.4.1
-*matplotlib=3.4.2
-*numpy=1.21.2
-*pandas=1.3.2
-*parse=1.19.0
-*pillow=8.3.1
-*python=3.9.6
-*scipy=1.7.1
-*seaborn=0.11.2
+* ddt=1.4.1
+* matplotlib=3.4.2
+* numpy=1.21.2
+* pandas=1.3.2
+* parse=1.19.0
+* pillow=8.3.1
+* python=3.9.6
+* scipy=1.7.1
+* seaborn=0.11.2
 
 ## License
 
