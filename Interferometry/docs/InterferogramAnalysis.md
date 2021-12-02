@@ -29,6 +29,10 @@ if codepath not in sys.path:
 %autoreload 2
 ```
 
+    The autoreload extension is already loaded. To reload it, use:
+      %reload_ext autoreload
+
+
 # Experimental interferograms
 
 
@@ -129,6 +133,9 @@ Prior to application of these methods the data are normalised so that the signal
 ifgm.normalize_interferogram(normalizing_width=10e-15, t_norm_start=10550e-15)
 ```
 
+    normalized mean 1.9387496740128303
+
+
 
 ```python
 ifgm.display_temporal_and_ft(vs_wavelength=False, 
@@ -144,18 +151,6 @@ ifgm.display_temporal_and_ft(vs_wavelength=False,
     
 
 
-
-```python
-ifgm.tau_samples.shape
-```
-
-
-
-
-    (1334,)
-
-
-
 ### Spectrogram
 
 * To compute the spectrogram, call ```compute_spectrogram_of_interferogram```method on the intererogram's class instance.
@@ -168,7 +163,7 @@ ifgm.compute_spectrogram_of_interferogram(nperseg=2**8,  plotting=True)
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_19_0.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_18_0.png)
     
 
 
@@ -179,28 +174,210 @@ ifgm.compute_spectrogram_of_interferogram(nperseg=2**8,  plotting=True)
 
 
 ```python
-ifgm.compute_wigner_ville_distribution(ifgm.tau_samples, ifgm.interferogram, plotting=True, vmin=-550, vmax=550)
+ifgm.compute_wigner_ville_distribution(ifgm.tau_samples, 
+                                       ifgm.interferogram, plotting=True, vmin=-550, vmax=550);
 ```
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_21_0.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_20_0.png)
     
 
 
 ## Second-order correlation
 
-* This needs further work 
-- filter cutoff, filter order 
+### By low-pass filtering
+
+* Compute  the g2 function by low-pass filtering the interferogram. Provide a cutoff frequency and an order of the Butterworth filter to ```gen_g2``` method. 
 
 
 ```python
-ifgm.gen_g2(filter_cutoff=50e12, filter_order=6, plotting=True)
+ifgm.gen_g2(filter_cutoff=15e12, filter_order=3, plotting=True)
 ```
 
 
     
 ![png](InterferogramAnalysis_files/InterferogramAnalysis_24_0.png)
+    
+
+
+* To plot the distribution of the g2 function vs. different cut-off frequencies and for different filter orders,
+use the ```gen_g2_vs_cutoff```method.
+* For coherent light, at zero time delay the g2 function is expected to be 1.
+* For illustration purposes, one may want to exclude from plotting those g2 functions
+whose values at time delay zero are slightly above or below 1. 
+* This can be done by setting g2_min and g2_max arguments.
+
+
+```python
+ifgm.gen_g2_vs_cutoff(cutoff_min = 10e12, cutoff_max = 100e12, cutoff_step = 2e12,
+                              order_min = 1, order_max = 7, order_step = 1,
+                              g2_min = 0.8, g2_max = 1.2,
+                              to_plot = True)
+```
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_26_0.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_26_1.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_26_2.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_26_3.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_26_4.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_26_5.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_26_6.png)
+    
+
+
+
+
+
+    array([[-1.        , -1.        , -1.        , ..., -1.        ,
+            -1.        , -1.        ],
+           [-1.        , -1.        , -1.        , ..., -1.        ,
+            -1.        , -1.        ],
+           [-1.        , -1.        , -1.        , ..., -1.        ,
+            -1.        , -1.        ],
+           ...,
+           [ 0.16741444,  0.17771622,  0.18793235, ...,  0.3491988 ,
+             0.34916483,  0.34913754],
+           [ 0.1672072 ,  0.17766317,  0.18803431, ...,  0.3469999 ,
+             0.34696279,  0.34693294],
+           [ 0.16696148,  0.17755951,  0.18807377, ...,  0.34517207,
+             0.34513176,  0.34509931]])
+
+
+
+## Savitzky-Golay filtering of experimental data
+
+* To eliminate noise in experimental interferograms, apply Savitzky-Golay filter.
+
+
+```python
+# interferogram before filtering
+from matplotlib import pyplot as plt
+plt.plot(ifgm.interferogram[600:-600])
+plt.show()
+```
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_29_0.png)
+    
+
+
+
+```python
+# filter (the numbers shall be chosen empirically - think about the physics and the sampling requirements)
+ifgm.gen_savitsky_golay_interferogram(window_size=11, order=3)
+```
+
+
+```python
+# interferogram after filtering
+from matplotlib import pyplot as plt
+plt.plot(ifgm.interferogram[600:-600])
+plt.show()
+```
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_31_0.png)
+    
+
+
+* Re-normalise interferogram upon the application of the filter 
+
+
+```python
+ifgm.normalize_interferogram(normalizing_width=10e-15, t_norm_start=10550e-15)
+```
+
+    normalized mean 2.2759733719133783
+
+
+* Compute the g2 function
+
+
+```python
+ifgm.gen_g2(filter_cutoff=15e12, filter_order=3, plotting=True)
+```
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_35_0.png)
+    
+
+
+* The width of the SG filter window can be found empirically. One has to keep in in mind the physics of the process so that all relevant features are kept whilst being filtered.
+
+* Although the g2 function is set by the low-frequency components of the  interferogram and hence should not be influenced by the SG smooting (the size of the window), the relevant features (oscillations at the fundamental and the double frequency) get distorted significantly once the size of the filter's window grows.
+
+* Example of g2 function for different window windths
+
+
+```python
+ifgm.gen_g2_vs_savitsky_golay(sg_window_min=3, sg_window_max=21, sg_window_step=2,
+                                 sg_order_min=2, sg_order_max=2, sg_order_step=1,
+                                 bw_filter_order = 3, bw_filter_cutoff = 15e12,
+                                 g2_min=0.99, g2_max=1.01,
+                                 to_plot=True);
+```
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_37_0.png)
+    
+
+
+* Example of distortions introduced by filtering with a large window
+
+
+```python
+# filter (the numbers shall be chosen empirically - think about the physics and the sampling requirements)
+ifgm.gen_savitsky_golay_interferogram(window_size=101, order=3)
+```
+
+
+```python
+# interferogram after filtering
+from matplotlib import pyplot as plt
+plt.plot(ifgm.interferogram[600:-600])
+plt.show()
+```
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_40_0.png)
     
 
 
@@ -228,25 +405,25 @@ ifgm.display_all(vs_wavelength=True, wav_min=300, wav_max=1000, wav_units="nm")
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_27_0.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_43_0.png)
     
 
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_27_1.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_43_1.png)
     
 
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_27_2.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_43_2.png)
     
 
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_27_3.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_43_3.png)
     
 
 
@@ -261,9 +438,9 @@ from Interferometry.classes.simulation import Simulation
 
 
 ```python
-sim = Simulation(lambd=800e-9, t_fwhm=100e-15, t_phase=0, 
-                 t_start=-200e-15, t_end=200e-15, delta_t=0.15e-15,
-                 tau_start=-200e-15, tau_end=200e-15, tau_step=0.15e-15)
+sim = Simulation(lambd=800e-9, t_fwhm=50e-15, t_phase=0, 
+                 t_start=-100e-15, t_end=100e-15, delta_t=0.15e-15,
+                 tau_start=-100e-15, tau_end=100e-15, tau_step=0.15e-15)
 ```
 
 * Generate an electric field pulse by calling ```gen_e_field```method on he initialised class instance.
@@ -279,7 +456,7 @@ e_t, a_t = sim.gen_e_field(delay=0, plotting=True);
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_32_1.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_48_1.png)
     
 
 
@@ -287,21 +464,19 @@ e_t, a_t = sim.gen_e_field(delay=0, plotting=True);
 
 
 ```python
-sim.gen_interferogram_simulation(temp_shift=-0e-15, plotting=True)
+sim.gen_interferogram_simulation(temp_shift=0, plotting=True)
 ```
 
-    (2667,)
-    (2667,)
-    (2667,)
+    (1334,)
+    (1334,)
+    (1334,)
 
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_34_1.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_50_1.png)
     
 
-
-### TODO: Fit to experimental data 
 
 ## Time-frequency analysis
 
@@ -320,12 +495,12 @@ sim.normalize_interferogram_simulation(normalizing_width=10e-15, t_norm_start=-1
 
 
 ```python
-sim.compute_wigner_ville_distribution(sim.tau_samples, sim.interferogram, plotting=True, vmin=-100, vmax=100)
+sim.compute_wigner_ville_distribution(sim.tau_samples, sim.interferogram, plotting=True, vmin=-100, vmax=100);
 ```
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_41_0.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_56_0.png)
     
 
 
@@ -344,9 +519,13 @@ sim.compute_wigner_ville_distribution(sim.tau_samples, sim.interferogram, plotti
 g2 = sim.gen_g2_analytical(plotting=True)
 ```
 
+    /Users/Pavel/Documents/repos/Interferometry/Interferometry/classes/simulation.py:231: ComplexWarning: Casting complex values to real discards the imaginary part
+      self.g2_analytical[idx] = np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau) / np.mean((e_t * np.conj(e_t))**2))
+
+
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_45_0.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_60_1.png)
     
 
 
@@ -354,22 +533,68 @@ g2 = sim.gen_g2_analytical(plotting=True)
 
 ### By low-pass filtering 
 
-* Compute  the g2 function by low-pass filtering simulated interferogram.
+* Compute  the g2 function by low-pass filtering the simulated interferogram. Provide a cutoff frequency and an order of the Butterworth filter to ```gen_g2``` method. 
 
 
 ```python
-sim.gen_g2(filter_cutoff=50e12, filter_order=6, plotting=True)
+sim.gen_g2(filter_cutoff=20e12, filter_order=3, plotting=True)
 ```
 
 
     
-![png](InterferogramAnalysis_files/InterferogramAnalysis_49_0.png)
+![png](InterferogramAnalysis_files/InterferogramAnalysis_64_0.png)
     
 
 
-### TODO: Fit the filter parameters  to have g2=1 
+* To plot the distribution of the g2 function vs. different cut-off frequencies and for dofferent filter orders,
+use the ```gen_g2_vs_cutoff_freq```method.
+* For coherent light, at zero time delay the g2 function is expected to be 1.
+* For illustration purposes, one may want to exclude from plotting those g2 functions
+whose values at time delay zero are slightly above or below 1. 
+* This can be done by setting g2_min and g2_max arguments.
 
 
 ```python
-
+sim.gen_g2_vs_cutoff(cutoff_min = 10e12, cutoff_max = 50e12, cutoff_step = 1e12,
+                              order_min = 1, order_max = 6, order_step = 1,
+                              g2_min = 0.99, g2_max = 1.01,
+                              to_plot = True);
 ```
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_66_0.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_66_1.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_66_2.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_66_3.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_66_4.png)
+    
+
+
+
+    
+![png](InterferogramAnalysis_files/InterferogramAnalysis_66_5.png)
+    
+
+
+
