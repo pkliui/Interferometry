@@ -224,9 +224,14 @@ class Simulation(BaseInterferometry):
         for idx, delay in enumerate(self.tau_samples):
             # compute the field and its envelope at current delay
             e_t_tau, a_t_tau = self.gen_e_field(delay=delay)
-            # compute the g2 value at current delay 
-            self.g2_analytical[idx] = np.real(np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau)) / np.mean((e_t * np.conj(e_t))**2))
-        #
+            # compute the g2 value at current delay
+            #
+            #e_t = np.real(e_t)
+            #e_t_tau = np.real(e_t_tau)
+            self.g2_analytical[idx] = np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau) / np.mean((e_t * np.conj(e_t))**2))
+            #self.g2_analytical[idx] = np.real(np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau)) / np.mean((e_t * np.conj(e_t))**2))
+
+    #
         if plotting:
             fig, ax = plt.subplots(1, figsize=(15, 5))
             ax.plot(self.tau_samples, self.g2_analytical)
