@@ -10,7 +10,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
 
 from Interferometry.classes.base import BaseInterferometry
-from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plotting, spectrograms, utils
+from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plotting, sampling, spectrograms, utils
 
 
 import numpy as np
@@ -64,13 +64,27 @@ class Interferogram(BaseInterferometry):
         super().__init__()
         self.pathtodata = pathtodata
         self.filetoread = filetoread
-        self.lambda0 = lambda0
+        self.interferogram = interferogram
         self.tau_samples = tau_samples
         self.tau_step = tau_step
         self.tau_units = tau_units
-        self.interferogram = interferogram
+        self.lambda0 = lambda0
+        #
+        # read interferogram and time samples
+        if self.interferogram is None and \
+                self.pathtodata is not None and self.filetoread is not None \
+                and os.path.exists(os.path.join(self.pathtodata, self.filetoread)):
+            self.read_data()
         self.freq = freq
         self.ft = ft
+        #
+        # compute the Fourier transform and the frequency samples
+        if self.freq is None and self.ft is None and \
+                self.interferogram is not None and self.tau_step is not None and self.tau_samples is not None:
+            self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
+        #
+        self.wav = 3e8 / self.freq
+        """ wavelength samples """
         self.g2 = g2
         self.tau_shannon = 1 / (2 * (3e8 / self.lambda0) * 2)
 
@@ -78,11 +92,10 @@ class Interferogram(BaseInterferometry):
         """
         Reads an interferogram vs. tau data saved in two tabulated columns
         with no header
-
         ---
         Modifies:
         ---
-        self.tau_samples, self.interferogram
+        self.tau_samples, self.tau_step, self.interferogram
         """
         pathtofile = os.path.join(self.pathtodata, self.filetoread)
         if os.path.exists(pathtofile):
@@ -98,17 +111,17 @@ class Interferogram(BaseInterferometry):
             #
             # make sure tau is in SI units
             if self.tau_step is None:
-                if self.get_tau_step() >= self.get_tau_units(self.tau_units):
-                    self.tau_step = self.get_tau_step() * self.get_tau_units(self.tau_units)
-                    self.tau_samples = self.tau_samples * self.get_tau_units(self.tau_units)
+                if sampling.get_time_step(self.tau_samples) >= sampling.get_tau_units(self.tau_units):
+                    self.tau_step = sampling.get_time_step(self.tau_samples) * sampling.get_tau_units(self.tau_units)
+                    self.tau_samples = self.tau_samples * sampling.get_tau_units(self.tau_units)
                 else:
-                    self.tau_step = self.get_tau_step()
+                    self.tau_step = sampling.get_time_step(self.tau_samples)
             else:
-                self.tau_step = self.get_tau_step() * self.get_tau_units(self.tau_units)
-                self.tau_samples = self.tau_samples * self.get_tau_units(self.tau_units)
+                self.tau_step = sampling.get_time_step(self.tau_samples) * sampling.get_tau_units(self.tau_units)
+                self.tau_samples = self.tau_samples * sampling.get_tau_units(self.tau_units)
             #
             # make sure tau samples are sorted in ascending order
-            # and the corresponding signal values too
+            # and the corresponding signal values too!
             self.tau_samples = np.sort(self.tau_samples)
             self.interferogram = np.flip(self.interferogram)
         else:
@@ -167,9 +180,9 @@ class Interferogram(BaseInterferometry):
             if True plots FT amplitude vs. wavelength
             if False plots FT amplitude vs. frequency (default)
         plot_type: str
-            "both" plots both temporal and frequency domain
+            "both" plots both temporal and Fourier domain
             "temporal" plots only temporal domain
-            "frequency" plots only frequency domain
+            "fourier" plots only Fourier domain data vs. frequency or wavelength
             Default is "both"
         wav_min : float
             min wavelength to plot, units set in wav_units
@@ -180,52 +193,26 @@ class Interferogram(BaseInterferometry):
         wav_units: str
             units of wav_min and wav_max
             must be one of the following: nm, um
-        ---
-        Modifies the following class variables:
-        ---
-        self.ft: numpy 1D array
-             Samples of the discrete  Fourier transform of the signal interferogram data
-        self.freq: numpy 1D array
-            Frequency samples as set by the discrete Fourier transform
         """
-        #
-        # FT datatensity
-        self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_samples, self.tau_step)
-        #
-        # get wavelengths samples
-        wav = self.convert_to_wavelength()
-        #
-        # get units of min and max wavelengths' boundaries and their indicies
-        wav_min_idx, wav_max_idx = self.get_minmax_indices(wav, wav_min, wav_max, self.get_wavelength_units(wav_units))
-        #
-        # plot FT amplitude vs. wavelength
+        # plot FT amplitude vs. freq. or wavelength
         if vs_wavelength is False:
-            x = self.freq
+            ft_samples = self.freq
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft)
             xlabel = "Frequency, Hz"
         else:
-            x = wav[wav_min_idx:wav_max_idx] * (1/self.get_wavelength_units(wav_units))
+            # get units of min and max wavelengths' boundaries and their indicies
+            wav_min_idx, wav_max_idx = self.get_minmax_indices(self.wav, wav_min, wav_max, self.get_wavelength_units(wav_units))
+            ft_samples = self.wav[wav_min_idx:wav_max_idx] * (1/self.get_wavelength_units(wav_units))
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft[wav_min_idx:wav_max_idx])
             xlabel = "Wavelength, {}".format(wav_units)
         #
         if plot_type == "both":
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5),  constrained_layout=True)
-            ax1.plot(self.tau_samples, self.interferogram)
-            ax1.set_xlabel("Time delay, {}".format(self.tau_units))
-            ax1.set_ylabel("Signal interferogram, a.u.")
-            ax2.plot(x, ft_abs)
-            ax2.set_xlabel(xlabel)
-            ax2.set_ylabel("FT amplitude, a.u.")
-        elif plot_type == "frequency":
-            fig, ax = plt.subplots(constrained_layout=True)
-            ax.plot(x, ft_abs)
-            ax.set_xlabel(xlabel)
-            ax.set_ylabel("Signal interferogram, a.u.")
+            plotting.plot_two_1dsignals(self.tau_samples, self.interferogram, "Time delay, {}".format(self.tau_units), "Signal interferogram, a.u.",
+                                        ft_samples, ft_abs, xlabel, "FT amplitude, a.u.")
+        elif plot_type == "fourier":
+            plotting.plot_1dsignal(ft_samples, ft_abs, xlabel, "Signal interferogram, a.u.")
         elif plot_type == "temporal":
-            fig, ax = plt.subplots(constrained_layout=True)
-            ax.plot(self.tau_samples, self.interferogram)
-            ax.set_xlabel("Time delay, {}".format(self.tau_units))
-            ax.set_ylabel("Signal interferogram, a.u.")
+            plotting.plot_1dsignal(self.tau_samples, self.interferogram, "Time delay, {}".format(self.tau_units), "Signal interferogram, a.u.")
         plt.suptitle(self.filetoread[:-4])
         plt.show()
 
@@ -287,7 +274,7 @@ class Interferogram(BaseInterferometry):
                 # normalize and add parameter
                 # by dividing by the mean value far away from tau zero
                 # and then subtracting 1 to have 0 at backgorund level
-                signal_norm = self.normalize(ifgm.interferogram, tau_step * self.get_tau_units(self.tau_units), normalizing_width=normalizing_width)
+                signal_norm = self.normalize(ifgm.interferogram, tau_step * sampling.get_tau_units(self.tau_units), normalizing_width=normalizing_width)
                 signal_and_parameter.append((parameter_value,  signal_norm))
             #
             # sort by parameter values in descending order so that the signal recorded at the largest parameter is on top
@@ -391,7 +378,7 @@ class Interferogram(BaseInterferometry):
                 # #
                 # FT the signal and normalise it by its max value
                 ft, freq = fourier_transforms.ft_data(ifgm.interferogram, ifgm.tau_samples,
-                                        tau_step * self.get_tau_units(self.tau_units))
+                                        tau_step * sampling.get_tau_units(self.tau_units))
                 #print("freq len", len(freq))
                 signal_and_parameter.append((parameter_value, np.abs(np.array(ft)) / np.max(np.abs(np.array(ft)))))
             #
@@ -572,25 +559,7 @@ class Interferogram(BaseInterferometry):
         self.interferogram = filtering.savitzky_golay_filter(self.interferogram, self.tau_shannon, self.tau_step,
                                                              window_size_shannon=window_size_shannon, window_size_pxls=window_size_pxls, order=order)
 
-    def convert_to_wavelength(self):
-        """
-        Converts frequency samples to wavelength samples
-        ---
-        Return
-        ---
-        wav: 1D numpy array
-            Wavelength samples, in meters
-        """
-        # compute the walength's samples
-        wav = 3e8 / self.freq
-        return wav
 
-    def get_tau_step(self):
-        """
-        Get a step from experimental tau_samples
-        It is assumed that the samples are equally sampled!
-        """
-        return np.abs(self.tau_samples[1] - self.tau_samples[0])
 
     @staticmethod
     def get_wavelength_units(units):
@@ -627,25 +596,6 @@ class Interferogram(BaseInterferometry):
         # make sure that they are sorted: wav_min_idx < wav_max_idx
         wav_min_idx, wav_max_idx = sorted([wav_min_idx, wav_max_idx], reverse=False)
         return wav_min_idx, wav_max_idx
-
-    @staticmethod
-    def get_tau_units(units):
-        """
-        Converts temporal units in string format to a float number
-        ---
-        Return
-        ---
-        tau_units: float
-            Time unit as a float number
-        """
-        units_dict = {"ps": 1e-12, "fs": 1e-15, "as": 1e-18}
-        if units in units_dict:
-            tau_units = units_dict[units]
-        else:
-            raise ValueError("Only the following units are allowed: {}".format(list(units_dict.keys())))
-        return tau_units
-
-
 
     def compute_wigner_ville_distribution(self, freq_crop=None, plotting=False, vmin=0, vmax=0):
         spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram, freq_crop=freq_crop,  plotting=plotting, vmin=vmin, vmax=vmax)
