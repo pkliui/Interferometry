@@ -6,6 +6,8 @@ import shutil, tempfile
 from ddt import ddt
 
 from Interferometry.classes.interferogram import Interferogram
+from Interferometry.modules import sampling
+
 
 @ddt
 class TestInterferogramClass(unittest.TestCase):
@@ -39,26 +41,19 @@ class TestInterferogramClass(unittest.TestCase):
 
     def test_read_data(self):
         """
-        test missing positional arguments
         test to read some non-existing data
         :return:
         """
-        with self.assertRaises(TypeError):
-            self.ifgm = Interferogram()
-            self.ifgm.read_data()
         with self.assertRaises(ValueError):
             self.ifgm = Interferogram(pathtodata='some_non_existing_path',
                                   filetoread="some_non_existing file")
-            self.ifgm.read_data()
 
     def test_convert_to_wavelength(self):
         """
         test converting frequencies to wavelegnths
         """
-
-        self.ifgm = Interferogram()
-        self.ifgm.freq = np.array([1, 2, 3.2, 1e17, 1.25e17])
-        self.assertTrue(np.array_equal(np.array([3e8, 1.5e8, 0.9375e8, 3e-9, 2.4e-9]), self.ifgm.convert_to_wavelength()))
+        self.ifgm = Interferogram(freq=np.array([1, 2, 3.2, 1e17, 1.25e17]))
+        self.assertTrue(np.array_equal(np.array([3e8, 1.5e8, 0.9375e8, 3e-9, 2.4e-9]), self.ifgm.wav))
 
     def test_get_wavelength_units(self):
         """
@@ -96,32 +91,32 @@ class TestInterferogramClass(unittest.TestCase):
         #
         # test allowed units
         self.ifgm = Interferogram()
-        unit = self.ifgm.get_tau_units("ps")
+        unit = sampling.get_time_units("ps")
         self.assertEqual(1e-12, unit)
         #
-        unit = self.ifgm.get_tau_units("fs")
+        unit = sampling.get_time_units("fs")
         self.assertEqual(1e-15, unit)
         #
-        unit = self.ifgm.get_tau_units("as")
+        unit = sampling.get_time_units("as")
         self.assertEqual(1e-18, unit)
         #
         # test non-allowed unit
         with self.assertRaises(ValueError):
-            _ = self.ifgm.get_tau_units("ns")
+            _ = sampling.get_time_units("ns")
 
-    def test_get_tau_step(self):
+    def test_get_time_step(self):
         """
         test getting a temporal step
         """
         #
         self.ifgm = Interferogram()
         self.ifgm.tau_samples = np.array([1, 3])
-        time_step = self.ifgm.get_tau_step()
+        time_step = sampling.get_time_step(self.ifgm.tau_samples)
         self.assertEqual(2, time_step)
         #
         self.ifgm = Interferogram()
         self.ifgm.tau_samples = np.array([1e-15, 3e-15])
-        time_step = self.ifgm.get_tau_step()
+        time_step = sampling.get_time_step(self.ifgm.tau_samples)
         self.assertAlmostEqual(2e-15, time_step)
 
 if __name__ == '__main__':
