@@ -6,9 +6,10 @@ from matplotlib import pyplot as plt
 from scipy.signal import butter, filtfilt
 from Interferometry.modules.filtering import low_pass_filter
 from Interferometry.modules.filtering import savitzky_golay_filter
+import itertools as it
 
 
-def compute_g2(signal_data, time_step, time_samples, filter_cutoff=30e12, filter_order=6, plotting=True):
+def compute_g2(signal_data, time_step, time_samples, filter_cutoff=30e12, filter_order=6, plotting=False):
     """
     Computes the second order correlation function
 
@@ -51,8 +52,7 @@ def compute_g2(signal_data, time_step, time_samples, filter_cutoff=30e12, filter
 
     return g2
 
-
-def g2_vs_low_pass_cutoff(signal_data, time_samples, time_step,
+def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
                          cutoff_min=1e12, cutoff_max=30e12, cutoff_step=1e12,
                          order_min=1, order_max=6, order_step=1,
                          g2_min=0.95, g2_max=1.05,
@@ -109,16 +109,16 @@ def g2_vs_low_pass_cutoff(signal_data, time_samples, time_step,
         g2_vs_freq = []
         # loop over the filter cutoff frequencies
         for fc in filter_cutoff_range:
-            g2 = compute_g2(signal_data, time_step, filter_cutoff=fc, filter_order=fo)
+            g2 = compute_g2(signal_data, time_step, time_samples, filter_cutoff=fc, filter_order=fo, plotting=False)
             #
             # threshold from below and append
             # if max g2 value is below the minimum, set all values of g2 to -1
-            g2[g2.max()<g2_min] = -1
+            g2[g2.max() < g2_min] = -1
             g2_vs_freq.append(g2)
         g2_vs_freq = np.array(g2_vs_freq)
         # threshold from above
         # set g2 at time delays where the maximum value of g2 is above g2_max to -1
-        g2_vs_freq[g2_vs_freq>g2_max] = -1
+        g2_vs_freq[g2_vs_freq > g2_max] = -1
         #
         #plot
         if to_plot:
@@ -130,7 +130,6 @@ def g2_vs_low_pass_cutoff(signal_data, time_samples, time_step,
             plt.title("g2 function, filter order = {}".format(fo))
             ax.set_xlabel("Time, s")
             ax.set_ylabel("Cut-off frequency, Hz")
-            #ax.invert_yaxis()
             plt.colorbar()
             plt.show()
 
@@ -142,45 +141,48 @@ def g2_vs_savitsky_golay(signal_data, time_shannon, time_step, time_samples,
                                  sg_order_min=1, sg_order_max=6, sg_order_step=1,
                                  bw_filter_order = 3, bw_filter_cutoff = 1e12,
                                  g2_min=0.95, g2_max=1.05,
-                                 to_plot=True):
+                                 plotting=False):
     """
     Computes the second-order correlation function as a function of the filter's cut-off frequency
-    !!! CHECK THE ARG IN SAV GOLAY FILTER _ THERE IS A NEW WINDOW SIZE IN PXLS AND WINDOW SIZE IN SHANNON UNITS!!! NOT THE SAME HERE IN COMPUTE G"....`
     ---
     Args:
     ---
+    signal_data: 1d ndarray
+        Signal to be filtered
+    time_shannon: 1d ndarray
+
     """
-    #
-    # range of cutoff frequencies to test
+    # if it is desired to keep the filter's window size below the Shannon's sampling time,
+    # set the max window size to the Shannon's sampling time
+    if keep_shannon_sampling:
+        sg_window_max =  int(np.ceil(time_shannon / time_step))
+    # otherwise, use the provided range of window sizes
     sg_window_range = np.linspace(sg_window_min, sg_window_max,
                                   1 + int(abs(sg_window_max - sg_window_min)/sg_window_step))
     # range of orders to test
     sg_filter_order = np.linspace(sg_order_min, sg_order_max, 1 + int(abs(sg_order_max - sg_order_min)/sg_order_step))
     #
     for fo in sg_filter_order:
-        #print("fo", fo)
         #
         # initialise a list to keep g2 at each filter cutoff frequency
         g2_vs_window_range = []
         # loop over the filter cutoff frequencies
         for wr in sg_window_range:
-            #print("wr ", wr)
-            #print(sg_window_range)
             # filter with SG filter
             signal_data = savitzky_golay_filter(signal_data, time_shannon, time_step, window_size_shannon=wr, window_size_pxls=int(wr), order=int(fo))
-
-            g2 = compute_g2(signal_data, time_step=time_step, filter_cutoff=bw_filter_cutoff, filter_order=bw_filter_order)
-            g2[g2.max()<g2_min] = -1
+            # compute the g2 function
+            g2 = compute_g2(signal_data, time_step, time_samples, filter_cutoff=bw_filter_cutoff, filter_order=bw_filter_order)
+            g2[g2.max() < g2_min] = -1
             g2_vs_window_range.append(g2)
         g2_vs_window_range = np.array(g2_vs_window_range)
         # threshold from above
         # set g2 at time delays where the maximum value of g2 is above g2_max to -1
-        g2_vs_window_range[g2_vs_window_range>g2_max] = -1
+        g2_vs_window_range[g2_vs_window_range > g2_max] = -1
 
         #plot
-        if to_plot:
+        if plotting:
             fig, ax = plt.subplots(1, figsize=(15, 5))
-            plt.imshow(g2_vs_window_range, aspect='auto',
+            plt.imshow(g2_vs_window_range, aspect='auto', origin='lower',
                        cmap=plt.get_cmap("viridis"), #vmin=0, vmax=1,
                        extent=(min(time_samples), max(time_samples),
                                min(sg_window_range), max(sg_window_range)))
@@ -191,4 +193,3 @@ def g2_vs_savitsky_golay(signal_data, time_shannon, time_step, time_samples,
             plt.show()
 
     return g2
-
