@@ -4,14 +4,14 @@ from scipy.optimize import minimize
 
 
 from Interferometry.classes.base import BaseInterferometry
-
+from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plots, sampling, spectrograms, utils
 
 class Simulation(BaseInterferometry):
     """
     class for simulating 1D interferometric data
     """
-    def __init__(self, lambd=800e-9, t_fwhm=100e-15, t_phase=0, t_start=-200e-15, t_end=200e-15, delta_t=0.15e-15,
-                 tau_start=0, tau_end=100e-15, tau_step=0.15e-15, interferogram=None, g2_analytical=None, g2=None):
+    def __init__(self, lambd0=800e-9, t_fwhm=100e-15, t_phase=0, t_start=-200e-15, t_end=200e-15, delta_t=0.15e-15,
+                 tau_start=0, tau_end=100e-15, tau_step=0.15e-15, interferogram=None, g2_analytical=None, g2=None, freq=None, ft=None):
         """
         Initializes the class to simulate interferometric data
 
@@ -56,8 +56,8 @@ class Simulation(BaseInterferometry):
             Default: None
         """
         super().__init__()
-        self.lambd = lambd
-        self.freq = 1 / (lambd / 3e8)
+        self.lambd0 = lambd0
+        self.freq0 = 1 / (lambd0 / 3e8)
         """float: Frequency of the fundamental signal"""
 
         self.t_fwhm = t_fwhm
@@ -81,11 +81,29 @@ class Simulation(BaseInterferometry):
         """int: Number of temporal delay samples"""
 
         self.tau_samples = np.linspace(tau_start, tau_end, self.tau_nsteps)
+        #print("tau samples", self.tau_samples)
         """1d numpy array of floats: Temporal delay samples"""
 
         self.interferogram = interferogram
+        # compute the interferogram if it is None
+        if self.interferogram is None:
+            #print("infgm in progress ")
+            #print(self.interferogram)
+            self.gen_interferogram_simulation()
+            #print(self.interferogram)
+            #print("  shape ",self.interferogram.shape)
+
+        self.freq = freq
+        self.ft = ft
+        # compute the Fourier transform and the frequency samples if they are None
+        if self.freq is None and self.ft is None and \
+                self.interferogram is not None and self.tau_step is not None and self.tau_samples is not None:
+            #print("ft in progress ")
+            self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
+
         self.g2_analytical = g2_analytical
         self.g2 = g2
+
 
     def gen_e_field(self, delay=0, plotting=False):
         """
@@ -111,13 +129,13 @@ class Simulation(BaseInterferometry):
         """
         #
         # of the following pulse properties are defined
-        if all(x is not None for x in [self._time_samples, self.t_fwhm, self.t_phase, self.freq]):
+        if all(x is not None for x in [self._time_samples, self.t_fwhm, self.t_phase, self.freq0]):
             #
             # compute the envelope of a Gaussian pulse
             envelope = np.exp(-4 * np.log(2) * (self._time_samples - delay)**2 / self.t_fwhm**2) \
                             * np.exp(1j * self.t_phase * (self._time_samples - delay)**2)
             # compute the electric field of a Gaussian pulse
-            e_field = envelope * np.exp(-1j * 2 * np.pi * self.freq * (self._time_samples - delay))
+            e_field = envelope * np.exp(-1j * 2 * np.pi * self.freq0 * (self._time_samples - delay))
             #
             # plot
             if plotting:
@@ -154,11 +172,11 @@ class Simulation(BaseInterferometry):
             #
             # iniitalise interferogram
             self.interferogram = np.zeros(len(self.tau_samples))
-            print(self.interferogram.shape)
+            print("ifgm shape ", self.interferogram.shape)
             #
             # initialise electric field and its envelope at delay = 0
             e_t, a_t = self.gen_e_field(delay = 0)
-            print(e_t.shape)
+            print("field shape ", e_t.shape)
             #
             # compute the temporal shift in pixels
             idx_temp_shift = int(temp_shift / self.tau_step)
@@ -169,6 +187,9 @@ class Simulation(BaseInterferometry):
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample)
                 # compute the interferogram
                 self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
+                # interferogram with an additional field autocorrelation term
+                # self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau)**2)**2) + 2 * np.sum(np.abs(e_t + e_t_tau)**2)
+
             print(self.interferogram.shape)
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
@@ -195,7 +216,7 @@ class Simulation(BaseInterferometry):
             Samples of the normalized interferogram
         """
         if t_norm_start is not None:
-            self.interferogram = self.normalize(self.interferogram, self.tau_step, self._time_samples,
+            self.interferogram = normalization.normalize(self.interferogram, self.tau_step, self._time_samples,
                                                 normalizing_width=normalizing_width, t_norm_start=t_norm_start)
         else:
             raise ValueError("starting value start_at cannot be none! ")
@@ -323,3 +344,50 @@ class Simulation(BaseInterferometry):
                                     g2_min=g2_min, g2_max=g2_max, to_plot=to_plot)
 
         return g2_vs_cutoff
+
+    def compute_wigner_ville_distribution(self, zoom_in_freq=None, plotting=False, vmin=0, vmax=0):
+        spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram, zoom_in_freq,  plotting=plotting, vmin=vmin, vmax=vmax)
+
+    def plot_cross_section_wvd(self, tpa_freq=3e8 / 440e-9, tpa_thresh=0.5, vmin=-550, vmax=550):
+        """
+        Plots the cross-section of the WVD
+        """
+        #
+        # plot the cross-section of the WVD
+        signal_wvd, t_wvd_samples, f_wvd_samples = spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram,
+                                                                                          None, plotting=False, vmin=vmin, vmax=vmax);
+        # get indicies of the frequencies closest to the tpa_freq
+        tpa_idx = np.where((abs(tpa_freq - self.freq) < abs(self.freq[1] - self.freq[0])))[0][0]
+        tpa_idx_low = int(np.ceil(len(f_wvd_samples)/2 + tpa_idx*2)-3)
+        tpa_idx_high = int(np.ceil(len(f_wvd_samples)/2 + tpa_idx*2)+3)
+
+        # get the WVD at the TPA frequency (in the vicinity of the TPA frequency)
+        signal_wvd_tpa = np.zeros(signal_wvd.shape)
+        signal_wvd_tpa[tpa_idx_low:tpa_idx_high, :] = np.copy(signal_wvd[tpa_idx_low:tpa_idx_high, :])
+
+        signal_wvd_tpa = signal_wvd_tpa.sum(axis=0)
+        signal_wvd_tpa = signal_wvd_tpa / signal_wvd_tpa.max()
+
+        # get the indices of time samples within the FWHM of the laser pulse
+        idx_t_fwhm_left = np.where(np.abs(self.tau_samples+self.t_fwhm/2) < abs(self.tau_samples[1] - self.tau_samples[0]))[0][0]
+        idx_t_fwhm_right = np.where(np.abs(self.tau_samples-self.t_fwhm/2) < abs(self.tau_samples[1] - self.tau_samples[0]))[0][0]
+
+        # set the mask distribution to 1 within the FWHM of the laser pulse and to 0 elsewhere
+        # this is the region where the definition of the TPA is always valid
+        tpa_region_mask = np.zeros(signal_wvd_tpa.shape)
+        tpa_region_mask[idx_t_fwhm_left:idx_t_fwhm_right] = 1
+
+        tpa_threshold_value = (signal_wvd_tpa[idx_t_fwhm_left] + signal_wvd_tpa[idx_t_fwhm_right])/2
+
+        # plot the cross-section
+        f, axx = plt.subplots(1)
+        im = axx.plot(self.tau_samples, signal_wvd_tpa)
+        axx.plot(self.tau_samples,tpa_region_mask)
+        axx.legend(("{} ".format(100*tpa_thresh)),
+                   )
+        axx.set_ylabel('TPA signal, a.u.')
+        axx.set_title("Wigner-Ville distribution at TPA frequency")
+        plt.show()
+
+        # return the mask distribution
+        return tpa_region_mask, tpa_threshold_value
