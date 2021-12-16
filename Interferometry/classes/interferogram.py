@@ -10,8 +10,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
 
 from Interferometry.classes.base import BaseInterferometry
-from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plots, sampling, spectrograms, utils
-
+from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plots, sampling, spectrograms, utils, tpa_utils
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,7 +21,7 @@ class Interferogram(BaseInterferometry):
     class for 1D interferometric data
     """
     def __init__(self, pathtodata=None, filetoread=None, lambda0 = 880e-9, tau_samples=None, tau_step=None, tau_units="fs", interferogram=None,
-                 freq=None, ft=None, g2=None):
+                 freq_samples=None, ft=None, g2=None):
         """
         Initializes the class
 
@@ -52,7 +51,7 @@ class Interferogram(BaseInterferometry):
         interferogram: numpy 1D array
             Samples of interferogram
             Default is None
-        freq: 1D numpy array
+        freq_samples: 1D numpy array
             Frequency samples as set by the discrete Fourier transform
         ft: 1D numpy array
             Samples of the discrete  Fourier transform of the signal interferogram data
@@ -74,18 +73,21 @@ class Interferogram(BaseInterferometry):
         if self.interferogram is None and \
                 self.pathtodata is not None and self.filetoread is not None:
             self.read_data()
-        self.freq = freq
+        self.freq_samples = freq_samples
         self.ft = ft
         #
         # compute the Fourier transform and the frequency samples
-        if self.freq is None and self.ft is None and \
+        if self.freq_samples is None and self.ft is None and \
                 self.interferogram is not None and self.tau_step is not None and self.tau_samples is not None:
-            self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
+            self.ft, self.freq_samples = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
         #
-        if self.freq is not None:
-            self.wav = 3e8 / self.freq
+        if self.freq_samples is not None:
+            self.wav = 3e8 / self.freq_samples
         """ wavelength samples """
         self.g2 = g2
+        self.g2_left_idx = None
+        self.g2_right_idx = None
+        self.g2_support = None
         self.tau_shannon = 1 / (2 * (3e8 / self.lambda0) * 2)
 
     def read_data(self):
@@ -196,13 +198,13 @@ class Interferogram(BaseInterferometry):
         """
         # plot FT amplitude vs. freq. or wavelength
         if vs_wavelength is False:
-            ft_samples = self.freq
+            ft_samples = self.freq_samples
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft)
             xlabel = "Frequency, Hz"
         else:
             # get units of min and max wavelengths' boundaries and their indicies
-            wav_min_idx, wav_max_idx = self.get_minmax_indices(self.wav, wav_min, wav_max, self.get_wavelength_units(wav_units))
-            ft_samples = self.wav[wav_min_idx:wav_max_idx] * (1/self.get_wavelength_units(wav_units))
+            wav_min_idx, wav_max_idx = utils.get_minmax_indices(self.wav, wav_min, wav_max, utils.get_wavelength_units(wav_units))
+            ft_samples = self.wav[wav_min_idx:wav_max_idx] * (1/utils.get_wavelength_units(wav_units))
             ft_abs = 2.0 / len(np.abs(self.ft)) * np.abs(self.ft[wav_min_idx:wav_max_idx])
             xlabel = "Wavelength, {}".format(wav_units)
         #
@@ -233,9 +235,85 @@ class Interferogram(BaseInterferometry):
         """
         spectrograms.stft_spectrogram(self.interferogram, self.tau_step, zoom_in_freq, nperseg=nperseg, plotting=plotting)
 
-
     def compute_wigner_ville_distribution(self, zoom_in_freq=None, plotting=False, vmin=0, vmax=0):
         spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram, zoom_in_freq,  plotting=plotting, vmin=vmin, vmax=vmax)
+
+    def compute_g2(self, filter_cutoff=30e12, filter_order=6, plotting=False):
+        """
+        Computes the second order correlation function from the experimental interferogram
+        ---
+        Args:
+        ---
+        filter_cutoff: float, optional
+            The cutoff frequency of the filter, in Hz
+            Default is 30e12
+        filter_order: int, optional
+            The order of the filter, Default is 6
+        plotting: bool, optional
+            If True, displays a plot of the computed g2
+            Default is False
+        ---
+        Modifies:
+        ---
+        self.g2
+        """
+        if self.interferogram.any() and self.tau_step.any() is not None:
+            self.g2 = self.g2_support * g2_function.compute_g2(self.interferogram, self.tau_step, self.tau_samples,
+                                             filter_cutoff=filter_cutoff, filter_order=filter_order, plotting=plotting)[:-1]
+        else:
+            raise ValueError("Temporal delay sample and interferogram samples cannot be None!")
+
+    def compute_g2_vs_lowpass_cutoff(self, cutoff_min = 1e12, cutoff_max = 30e12, cutoff_step = 1e12,
+                                     order_min = 1, order_max = 6, order_step = 1,
+                                     g2_min = 0.95, g2_max = 1.05,
+                                     to_plot = True):
+        """
+        Compute the second order correlation function from the experimental interferogram
+        for different cutoff frequencies and orders of the Butterworth filter
+        ---
+        Args:
+        ---
+        signal: 1d ndarray
+            Signal to be filtered
+        time_samples: 1d ndarray
+            Time samples of the signal
+        time_step: float
+            Temporal step of the signal
+        cutoff_min: float, optional
+            The minimum cutoff frequency of the filter, in Hz
+            Default is 1e12
+        cutoff_max: float, optional
+            The maximum cutoff frequency of the filter, in Hz
+            Default is 30e12
+        cutoff_step: float, optional
+            The step of the cutoff frequency of the filter, in Hz
+            Default is 1e12
+        order_min: int, optional
+            The minimum order of the filter, Default is 1
+        order_max: int, optional
+            The maximum order of the filter, Default is 6
+        order_step: int, optional
+            The step of the order of the filter, Default is 1
+        g2_min: float, optional
+            If the maximum value of the computed g2 is below this value, the whole g2 distribution is set to -1
+            Default is 0.95
+        g2_max: float, optional
+            Pixel values of the computed g2 that exceed g2_max are set to -1
+            Default is 1.05
+        to_plot: bool, optional
+            If True, the g2 distribution is plotted
+        ---
+        Returns:
+        ---
+        g2_vs_freq: 2d ndarray
+            The second order correlation function as a function of the filter's cut-off frequency
+
+        """
+        g2_vs_cutoff = g2_function.g2_vs_lowpass_cutoff(self.interferogram, self.tau_samples, self.tau_step,
+                                                         cutoff_min=cutoff_min, cutoff_max=cutoff_max, cutoff_step=cutoff_step,
+                                                         order_min=order_min, order_max=order_max, order_step=order_step,
+                                                         g2_min=g2_min, g2_max=g2_max, to_plot=to_plot)
+        return g2_vs_cutoff
 
     def display_temporal_vs_parameter(self, parameter=None, normalizing_width=10e-15, title="Some title"):
         """
@@ -305,7 +383,7 @@ class Interferogram(BaseInterferometry):
             # this is because the parameter ticks value will be highest at the top
             # and lowest at the bottom (as set by matplotlib)
             parameters_sorted = sorted(parameters_sorted, reverse=False)
-            #
+            #1
             # plot
             fig, ax = plt.subplots(figsize=(10, 5))
             im = ax.imshow(data_sorted, interpolation=None, 
@@ -455,98 +533,6 @@ class Interferogram(BaseInterferometry):
             ifgm.read_data()
             ifgm.display_temporal_and_ft(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
 
-    def compute_g2(self, filter_cutoff=30e12, filter_order=6, plotting=False):
-        """
-        Compute the second order correlation function from the experimental interferogram
-        ---
-        Args:
-        ---
-        filter_cutoff: float, optional
-            The cutoff frequency of the filter, in Hz
-            Default is 30e12
-        filter_order: int, optional
-            The order of the filter, Default is 6
-        plotting: bool, optional
-            If True, displays a plot of the computed g2
-            Default is False
-        ---
-        Modifies:
-        ---
-        self.g2: 1D array of floats
-            Samples of the g2 computed from the experimental interferogram
-        """
-        if self.interferogram.any() and self.tau_step.any() is not None:
-            self.g2 = g2_function.compute_g2(self.interferogram, self.tau_step, self.tau_samples,
-                                             filter_cutoff=filter_cutoff, filter_order=filter_order, plotting=plotting)
-        else:
-            raise ValueError("Temporal delay sample and interferogram samples cannot be None!")
-
-    def compute_g2_vs_lowpass_cutoff(self, cutoff_min = 1e12, cutoff_max = 30e12, cutoff_step = 1e12,
-                              order_min = 1, order_max = 6, order_step = 1,
-                              g2_min = 0.95, g2_max = 1.05,
-                              to_plot = True):
-        """
-        Compute the second order correlation function from the experimental interferogram
-        for different cutoff frequencies and orders of the Butterworth filter
-        ---
-        Args:
-        ---
-        signal: 1d ndarray
-            Signal to be filtered
-        time_samples: 1d ndarray
-            Time samples of the signal
-        time_step: float
-            Temporal step of the signal
-        cutoff_min: float, optional
-            The minimum cutoff frequency of the filter, in Hz
-            Default is 1e12
-        cutoff_max: float, optional
-            The maximum cutoff frequency of the filter, in Hz
-            Default is 30e12
-        cutoff_step: float, optional
-            The step of the cutoff frequency of the filter, in Hz
-            Default is 1e12
-        order_min: int, optional
-            The minimum order of the filter, Default is 1
-        order_max: int, optional
-            The maximum order of the filter, Default is 6
-        order_step: int, optional
-            The step of the order of the filter, Default is 1
-        g2_min: float, optional
-            If the maximum value of the computed g2 is below this value, the whole g2 distribution is set to -1
-            Default is 0.95
-        g2_max: float, optional
-            Pixel values of the computed g2 that exceed g2_max are set to -1
-            Default is 1.05
-        to_plot: bool, optional
-            If True, the g2 distribution is plotted
-        ---
-        Returns:
-        ---
-        g2_vs_freq: 2d ndarray
-            The second order correlation function as a function of the filter's cut-off frequency
-
-        """
-        g2_vs_cutoff = g2_function.g2_vs_low_pass_cutoff(self.interferogram, self.tau_samples, self.tau_step,
-                                    cutoff_min=cutoff_min, cutoff_max=cutoff_max, cutoff_step=cutoff_step,
-                                    order_min=order_min, order_max=order_max, order_step=order_step,
-                                    g2_min=g2_min, g2_max=g2_max, to_plot=to_plot)
-        return g2_vs_cutoff
-
-    def gen_g2_vs_savitsky_golay(self, sg_window_min=0.1, sg_window_max=1, sg_window_step=0.1,
-                                 sg_order_min=1, sg_order_max=6, sg_order_step=1,
-                                 bw_filter_order = 3, bw_filter_cutoff = 1e12,
-                                 g2_min=0.95, g2_max=1.05,
-                                 to_plot=True):
-
-        g2_sg_window = self.compute_g2_vs_savitsky_golay(self.interferogram, self.tau_shannon, self.tau_step, self.tau_samples,
-                                     sg_window_min=sg_window_min, sg_window_max=sg_window_max, sg_window_step=sg_window_step,
-                                     sg_order_min=sg_order_min, sg_order_max=sg_order_max, sg_order_step=sg_order_step,
-                                     bw_filter_order = bw_filter_order, bw_filter_cutoff = bw_filter_cutoff,
-                                     g2_min=g2_min, g2_max=g2_max,
-                                     to_plot=to_plot)
-        return g2_sg_window
-
     def apply_savitzky_golay_filter(self, window_size_shannon=1, window_size_pxls=None,  order=2):
         """
         Apply a Savitzky-Golay filter to the interferogram
@@ -566,84 +552,92 @@ class Interferogram(BaseInterferometry):
         self.interferogram = filtering.savitzky_golay_filter(self.interferogram, self.tau_shannon, self.tau_step,
                                                              window_size_shannon=window_size_shannon, window_size_pxls=window_size_pxls, order=order)
 
+    def gen_g2_vs_savitsky_golay(self, sg_window_min=0.1, sg_window_max=1, sg_window_step=0.1,
+                                 keep_shannon_sampling=True,
+                                 sg_order_min=1, sg_order_max=6, sg_order_step=1,
+                                 bw_filter_order=3, bw_filter_cutoff=1e12,
+                                 g2_min=0.95, g2_max=1.05,
+                                 plotting=True):
 
+        g2_sg_window = g2_function.g2_vs_savitsky_golay(self.interferogram, self.tau_shannon, self.tau_step, self.tau_samples,
+                                                        keep_shannon_sampling=keep_shannon_sampling,
+                                     sg_window_min=sg_window_min, sg_window_max=sg_window_max, sg_window_step=sg_window_step,
+                                     sg_order_min=sg_order_min, sg_order_max=sg_order_max, sg_order_step=sg_order_step,
+                                     bw_filter_order = bw_filter_order, bw_filter_cutoff = bw_filter_cutoff,
+                                     g2_min=g2_min, g2_max=g2_max,
+                                     plotting=plotting)
+        return g2_sg_window
 
-    @staticmethod
-    def get_wavelength_units(units):
-        """
-        Converts wavelength  units in string format to a float number
-        ---
-        Return
-        ---
-        wav_units: float
-            Wavelength unit as a float number
-        """
-        units_dict = {"nm": 1e-9, "um": 1e-6}
-        if units in units_dict:
-            wav_units = units_dict[units]
-        else:
-            raise ValueError("Only the following units are allowed: {}".format(list(units_dict.keys())))
-        return wav_units
-
-    @staticmethod
-    def get_minmax_indices(wav, wav_min, wav_max, units):
-        """
-        Converts the min and max wavelength values to indices
-        ---
-        Return
-        ---
-        wav_min_idx: int
-            Index of wav array where it is equal to the min wavelength wav_min
-        wav_max_idx: int
-            Index of wav array where it is equal to the min wavelength wav_max
-        """
-        # search for the indices whose elements are closest to specified xmin and xmax, respectively
-        wav_min_idx = min(range(len(wav)), key=lambda i: abs(wav[i] - units * wav_min))
-        wav_max_idx = min(range(len(wav)), key=lambda i: abs(wav[i] - units * wav_max))
-        # make sure that they are sorted: wav_min_idx < wav_max_idx
-        wav_min_idx, wav_max_idx = sorted([wav_min_idx, wav_max_idx], reverse=False)
-        return wav_min_idx, wav_max_idx
-
-    def plot_cross_section_wvd(self, tpa_freq=3e8 / 440e-9, vmin=-550, vmax=550):
+    def plot_cross_section_wvd(self, tpa_freq=3e8 / 440e-9, freq_window_size=3, tpa_thresh=0.5,
+                               tpa_tolerance=2e-15, vmin=-550, vmax=550, plotting=True):
         """
         Plots the cross-section of the WVD
+        ---
+        Args:
+        ---
+        tpa_freq: float, optional
+            The frequency of the TPA, in Hz
+            Default is 3e8 / 440e-9
+        freq_window_size: int, optional
+            The distance between the frequency of interest and the closest indicies we are looking for, in pixels
+            Default is 3
+        tpa_thresh: float, optional
+            The simulated threshold of the TPA signal set by the laser pulse duration
+            Default is 0.5
+        tpa_tolerance: float, optional
+            The maximal acceptable distance between different sub-regions of the detected TPA signal, in seconds
+            Default is 2e-15
+        vmin: float, optional
+            The minimum value of the colorbar
+            Default is -550
+        vmax: float, optional
+            The maximum value of the colorbar
+            Default is 550
+        plotting: bool, optional
+            Whether to plot the cross-section or not
+            Default is True
         """
-        #
-        # plot the cross-section of the WVD
-        plt.figure(figsize=(8, 6))
-        signal_wvd, t_wvd_samples, f_wvd_samples = self.compute_wigner_ville_distribution(self.tau_samples, self.interferogram, plotting=True, vmin=vmin, vmax=vmax)
-        # get the index of the frequency closest to the tpa_freq
-        tpa_idx = np.where((abs(tpa_freq - self.freq) < abs(self.freq[1] - self.freq[0])))[0][0]
+        # compute Wigner-Ville distribution
+        signal_wvd, t_wvd_samples, f_wvd_samples = spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram,
+                                                                                          None, plotting=False, vmin=vmin, vmax=vmax)
+        # get the indicies of the frequencies separated from the two-photon absorption frequency by the window_size
+        tpa_idx_low, tpa_idx_high = tpa_utils.closest_indicies(tpa_freq, f_wvd_samples, freq_window_size)
+        # get the WVD at the two-photon absorption frequency
+        signal_wvd_tpa = tpa_utils.wigner_ville_distribution_tpa(signal_wvd, tpa_idx_low, tpa_idx_high)
+        # get a loose support of the TPA signal set by the laser pulse duration through the TPA threshold
+        tpa_signal_loose, max_idx = tpa_utils.loosely_thresholded_tpa_signal(signal_wvd_tpa, tpa_thresh)
+        # get the tight support of the TPA signal
+        tpa_signal_tight = tpa_utils.tightly_thresholded_tpa_signal(tpa_signal_loose, max_idx, self.tau_step,
+                                                              tpa_tolerance=tpa_tolerance)
 
-        print(tpa_idx)
+        tight_support = tpa_utils.tight_support_tpa(tpa_signal_tight)
 
+        self.g2_support = tight_support
 
+        if plotting:
+            # pick only the fully connected central region of the mask
+            n = 0#700
+            m = len(signal_wvd_tpa) #1500
 
-        tpa_idx_low = int(len(self.freq)/2) + tpa_idx-1
-        tpa_idx_high = int(len(self.freq)/2) + tpa_idx+1
-        signal_wvd_tpa = np.zeros(signal_wvd.shape)
-        signal_wvd_tpa[tpa_idx_low:tpa_idx_high, :] = signal_wvd[tpa_idx_low:tpa_idx_high, :]
+            plt.figure(figsize=(18, 6))
+            plt.plot(self.tau_samples[n:m-1]*1e15, signal_wvd_tpa[n:m-1])
+            plt.show()
 
+            plt.figure(figsize=(18, 6))
+            plt.plot(self.tau_samples[n:m-1]*1e15, signal_wvd_tpa[n:m-1])
+            plt.plot(self.tau_samples[n:m-1]*1e15, tpa_signal_loose[n:m-1])
+            plt.plot(self.tau_samples[n:m-1]*1e15, tpa_signal_tight[n:m-1])
+            plt.show()
 
-        plt.plot(signal_wvd_tpa.sum(axis=0))
-        plt.show()
+            plt.figure(figsize=(18, 6))
+            plt.plot(self.tau_samples[n:m-1]*1e15, tight_support[n:m-1] * signal_wvd_tpa[n:m-1])
+            plt.show()
 
-        plt.plot(signal_wvd_tpa.sum(axis=1))
-        plt.show()
+            plt.figure(figsize=(18, 6))
+            plt.plot(self.tau_samples[n:m-1]*1e15, tight_support[n:m-1])
+            plt.show()
 
-        delta_f = f_wvd_samples[1] - f_wvd_samples[0]
-        f, axx = plt.subplots(1)
-        im = axx.imshow(signal_wvd_tpa,
-                        aspect='auto', origin='lower',
-                        extent=(self.tau_samples[0] - self.tau_step / 2, self.tau_samples[-1] + self.tau_step / 2,
-                                f_wvd_samples[0] - delta_f / 2, f_wvd_samples[-1] + delta_f / 2),
-                        cmap = plt.get_cmap("viridis"), vmin=-1, vmax=1)
-
-        axx.set_ylabel('frequency [Hz]')
-        plt.colorbar(im, ax=axx)
-        axx.set_title("amplitude of Wigner-Ville distr.")
-        plt.show()
-
+            return self.g2_support
 
     def plot_cross_section_stft(self, tpa_freq=3e8 / 440e-9, nperseg=2**5):
         """
@@ -652,16 +646,16 @@ class Interferogram(BaseInterferometry):
         #
         # plot the cross-section of the WVD
         plt.figure(figsize=(8, 6))
-        signal_stft, t_stft_samples, f_stft_samples = self.compute_spectrogram(self.interferogram, self.tau_step,
-                                                                               nperseg=nperseg, plotting=True)
+        signal_stft, t_stft_samples, f_stft_samples = spectrograms.stft_spectrogram(self.interferogram, self.tau_step,
+                                                                                    None, nperseg=nperseg, plotting=True)
         # get the index of the frequency closest to the tpa_freq
-        tpa_idx = np.where((abs(tpa_freq - self.freq) < abs(self.freq[1] - self.freq[0])))[0][0]
+        tpa_idx = np.where((abs(tpa_freq - self.freq_samples) < abs(self.freq_samples[1] - self.freq_samples[0])))[0][0]
         print(tpa_idx)
         # because of the sampling peculiarities of stft, we need to shift the index by scaling it
-        tpa_idx = int(tpa_idx * 0.5 * nperseg / len(self.freq))
+        tpa_idx = int(tpa_idx * 0.5 * nperseg / len(self.freq_samples))
 
         print(tpa_idx)
-        print("len(self.freq) ", len(self.freq))
+        print("len(self.freq) ", len(self.freq_samples))
 
         tpa_idx_low = int(len(f_stft_samples)/2) + int(tpa_idx)-5
         tpa_idx_high = int(len(f_stft_samples)/2) + int(tpa_idx)+5
@@ -707,8 +701,6 @@ class Interferogram(BaseInterferometry):
         plt.show()
 
         print("hez ")
-
-
 
 class MidpointNormalize(colors.Normalize):
     """
