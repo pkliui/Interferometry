@@ -66,7 +66,7 @@ def plot_2dspectrogram(sampling_variable_1, label_1, sampling_variable_2, label_
                         sampling_variable_2[0] - d2 / 2, sampling_variable_2[-1] + d2 / 2,
                         sampling_variable_1[0] - d1 / 2, sampling_variable_1[-1] + d1 / 2),
                     norm=colors.Normalize(vmin=vmin, vmax=vmax),
-                    cmap="viridis"
+                    cmap="bwr"
                     )
     axx.set_xlabel(label_2)
     axx.set_ylabel(label_1)
