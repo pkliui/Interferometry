@@ -4,7 +4,9 @@ This module contains functions to compute and plot spectrograms with given param
 import numpy as np
 import tftb
 from matplotlib import pyplot as plt
-from scipy.signal import stft
+from scipy.signal import stft, hilbert, detrend
+from scipy.signal.windows import gaussian
+
 
 from Interferometry.modules import plots, sampling
 
@@ -53,7 +55,6 @@ def stft_spectrogram(signal, time_step, zoom_in_freq, nperseg=2**6, plotting=Fal
         plots.plot_2dspectrogram(f_stft_samples, 'frequency, Hz', t_stft_samples, "time, s", np.abs(signal_stft), 'spectrogram - amplitude of STFT',
                                  vmin=np.abs(signal_stft).min(), vmax=np.abs(signal_stft).max())
     return signal_stft, t_stft_samples, f_stft_samples
-
 
 def wigner_ville_distribution(time_samples, signal_data, zoom_in_freq, plotting=False, vmin=0, vmax=0):
     """
@@ -108,19 +109,6 @@ def wigner_ville_distribution(time_samples, signal_data, zoom_in_freq, plotting=
         signal_wvd, f_wvd_samples = sampling.zoom_in_2d(signal_wvd, f_wvd_samples, zoom_in_freq)
         if plotting:
             plots.plot_2dspectrogram(f_wvd_samples, 'frequency, Hz', t_wvd_samples, "time, s", signal_wvd, 'spectrogram - amplitude of WVD', vmin=vmin, vmax=vmax)
-        #
-        # if plotting:
-        #     f, axx = plt.subplots(1)
-        #     im = axx.imshow(signal_wvd_2plot,
-        #                     aspect='auto',
-        #                     origin='lower',
-        #                     extent=(time_samples[0] - delta_t / 2, time_samples[-1] + delta_t / 2,
-        #                             f_wvd_samples[0] - delta_f / 2, f_wvd_samples[-1] + delta_f / 2),
-        #                     cmap = plt.get_cmap("magma"), vmin=vmin, vmax=vmax)
-        #     axx.set_ylabel('frequency [Hz]')
-        #     plt.colorbar(im, ax=axx)
-        #     axx.set_title("amplitude of Wigner-Ville distr.")
-        #     plt.show()
     else:
         raise ValueError("Time_samples and signal_data must have the same length!")
     return signal_wvd, t_wvd_samples, f_wvd_samples
