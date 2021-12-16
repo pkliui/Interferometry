@@ -35,7 +35,7 @@ class TestInterferogramClass(unittest.TestCase):
         test the input arguments are existing and are all None
         :return:
         """
-        for var in ["pathtodata", "filetoread", "tau_samples", "tau_step", "interferogram", "freq", "ft", "g2"]:
+        for var in ["pathtodata", "filetoread", "tau_samples", "tau_step", "interferogram", "freq_samples", "ft", "g2"]:
             self.assertIn(var, self.ifgm.__dict__)
             self.assertEqual(self.ifgm.__dict__[var], None)
 
@@ -52,37 +52,8 @@ class TestInterferogramClass(unittest.TestCase):
         """
         test converting frequencies to wavelegnths
         """
-        self.ifgm = Interferogram(freq=np.array([1, 2, 3.2, 1e17, 1.25e17]))
+        self.ifgm = Interferogram(freq_samples=np.array([1, 2, 3.2, 1e17, 1.25e17]))
         self.assertTrue(np.array_equal(np.array([3e8, 1.5e8, 0.9375e8, 3e-9, 2.4e-9]), self.ifgm.wav))
-
-    def test_get_wavelength_units(self):
-        """
-        test getting wavelength units
-        """
-        #
-        # test allowed units
-        self.ifgm = Interferogram()
-        unit = self.ifgm.get_wavelength_units("nm")
-        self.assertEqual(1e-9, unit)
-        #
-        unit = self.ifgm.get_wavelength_units("um")
-        self.assertEqual(1e-6, unit)
-        #
-        # test non-allowed unit
-        with self.assertRaises(ValueError):
-            unit = self.ifgm.get_wavelength_units("cm")
-
-    def test_get_minmax_indices(self):
-        """
-        tests getting indices of the min and max specified wav values
-        :return:
-        """
-        self.ifgm = Interferogram()
-        wav_min_idx, wav_max_idx = self.ifgm.get_minmax_indices(wav=np.array([3, 4, 5, 6, 7, 8, 9]), wav_min=4, wav_max=6, units=1)
-        self.assertEqual((1, 3), (wav_min_idx, wav_max_idx))
-        #
-        wav_min_idx, wav_max_idx = self.ifgm.get_minmax_indices(wav=1e-9*np.array([3, 4, 5, 6, 7, 8, 9]), wav_min=4, wav_max=6, units=1e-9)
-        self.assertEqual((1, 3), (wav_min_idx, wav_max_idx))
 
     def test_get_time_units(self):
         """
