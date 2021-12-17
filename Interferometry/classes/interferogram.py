@@ -86,8 +86,11 @@ class Interferogram(BaseInterferometry):
         """ wavelength samples """
         self.g2 = g2
         self.g2_left_idx = None
+        """left index of the g2 support"""
         self.g2_right_idx = None
+        """right index of the g2 support"""
         self.g2_support = None
+        """g2 support"""
         self.tau_shannon = 1 / (2 * (3e8 / self.lambda0) * 2)
 
     def read_data(self):

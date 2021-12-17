@@ -4,7 +4,9 @@ from scipy.optimize import minimize
 
 
 from Interferometry.classes.base import BaseInterferometry
-from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plots, sampling, spectrograms, utils
+from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plots, sampling, \
+    spectrograms, utils, tpa_utils
+
 
 class Simulation(BaseInterferometry):
     """
@@ -89,7 +91,7 @@ class Simulation(BaseInterferometry):
         if self.interferogram is None:
             #print("infgm in progress ")
             #print(self.interferogram)
-            self.gen_interferogram_simulation()
+            self.gen_interferogram()
             #print(self.interferogram)
             #print("  shape ",self.interferogram.shape)
 
@@ -103,6 +105,8 @@ class Simulation(BaseInterferometry):
 
         self.g2_analytical = g2_analytical
         self.g2 = g2
+        self.g2_support = None
+        """g2 support"""
 
 
     def gen_e_field(self, delay=0, plotting=False):
@@ -147,7 +151,7 @@ class Simulation(BaseInterferometry):
             raise ValueError("Check input variables, they cannot be None")
         return e_field, envelope
 
-    def gen_interferogram_simulation(self, temp_shift=0, plotting=False):
+    def gen_interferogram(self, temp_shift=0, plotting=False):
         """
         Computes an interferometric autocorrelation (an interferogram)
 
@@ -172,11 +176,9 @@ class Simulation(BaseInterferometry):
             #
             # iniitalise interferogram
             self.interferogram = np.zeros(len(self.tau_samples))
-            print("ifgm shape ", self.interferogram.shape)
             #
             # initialise electric field and its envelope at delay = 0
             e_t, a_t = self.gen_e_field(delay = 0)
-            print("field shape ", e_t.shape)
             #
             # compute the temporal shift in pixels
             idx_temp_shift = int(temp_shift / self.tau_step)
@@ -190,7 +192,6 @@ class Simulation(BaseInterferometry):
                 # interferogram with an additional field autocorrelation term
                 # self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau)**2)**2) + 2 * np.sum(np.abs(e_t + e_t_tau)**2)
 
-            print(self.interferogram.shape)
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
                 ax.plot(self.tau_samples, self.interferogram)
@@ -254,6 +255,12 @@ class Simulation(BaseInterferometry):
                 plt.show()
         else:
             raise ValueError("self.tau_samples variable cannot be None")
+
+    def display_temporal_and_ft(self):
+        plots.plot_subplots_1dsignals(self.tau_samples, self.interferogram, "time, fs", "intensity, a.u.",
+                                      self.freq, np.abs(self.ft), "freq, Hz", "FT amplitude, a.u.")
+
+
 
     def normalize_interferogram_simulation(self, normalizing_width=10e-15, t_norm_start=None):
         """
@@ -404,50 +411,28 @@ class Simulation(BaseInterferometry):
     def compute_wigner_ville_distribution(self, zoom_in_freq=None, plotting=False, vmin=0, vmax=0):
         spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram, zoom_in_freq,  plotting=plotting, vmin=vmin, vmax=vmax)
 
-    def plot_cross_section_wvd(self, tpa_freq=3e8 / 440e-9, tpa_thresh=0.5, vmin=-550, vmax=550):
+    def g2_support_simulated(self, tpa_freq=3e8 / 440e-9, freq_window_size = 3, vmin=-550, vmax=550,
+                               plotting=True):
         """
         Plots the cross-section of the WVD
         """
         #
-        # plot the cross-section of the WVD
+        # get the cross-section of the WVD
         signal_wvd, t_wvd_samples, f_wvd_samples = spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram,
                                                                                           None, plotting=False, vmin=vmin, vmax=vmax);
-        print("inter", self.interferogram.shape)
-        print("signal_wvd", signal_wvd.shape)
-        print("t_wvd", t_wvd_samples.shape)
-        print("f_wvd", f_wvd_samples.shape)
         # get indicies of the frequencies closest to the tpa_freq
-        tpa_idx = np.where((abs(tpa_freq - self.freq) < abs(self.freq[1] - self.freq[0])))[0][0]
-        tpa_idx_low = int(np.ceil(len(f_wvd_samples)/2 + tpa_idx*2)-3)
-        tpa_idx_high = int(np.ceil(len(f_wvd_samples)/2 + tpa_idx*2)+3)
+        tpa_idx_low, tpa_idx_high = tpa_utils.closest_indicies(tpa_freq, f_wvd_samples, freq_window_size)
 
-        # get the WVD at the TPA frequency (in the vicinity of the TPA frequency)
-        signal_wvd_tpa = np.zeros(signal_wvd.shape)
-        signal_wvd_tpa[tpa_idx_low:tpa_idx_high+1, :] = np.copy(signal_wvd[tpa_idx_low:tpa_idx_high+1, :])
+        # get the WVD at the two-photon absorption frequency
+        signal_wvd_tpa = tpa_utils.wigner_ville_distribution_tpa(signal_wvd, tpa_idx_low, tpa_idx_high)
+        # get the tight siupport of the g2 function and the corresponding threshold value of the WVD distribution at TPA frequency
+        tight_support, tpa_thresh = tpa_utils.tight_support_tpa_simulation(self.tau_samples, self.t_fwhm, signal_wvd_tpa)
+        self.g2_support = tight_support
 
-        signal_wvd_tpa = signal_wvd_tpa.sum(axis=0)
-        signal_wvd_tpa = signal_wvd_tpa / signal_wvd_tpa.max()
+        if plotting:
+            plots.plot_multiple_1dsignals(t_wvd_samples*1e15, "time, fs", "Intensity, a.u.",
+                                  (signal_wvd_tpa, "TPA signal"), (self.g2_support, "TPA support"))
 
-        # get the indices of time samples within the FWHM of the laser pulse
-        idx_t_fwhm_left = np.where(np.abs(self.tau_samples+self.t_fwhm/2) < abs(self.tau_samples[1] - self.tau_samples[0]))[0][0]
-        idx_t_fwhm_right = np.where(np.abs(self.tau_samples-self.t_fwhm/2) < abs(self.tau_samples[1] - self.tau_samples[0]))[0][0]
-
-        # set the mask distribution to 1 within the FWHM of the laser pulse and to 0 elsewhere
-        # this is the region where the definition of the TPA is always valid
-        tpa_region_mask = np.zeros(signal_wvd_tpa.shape)
-        tpa_region_mask[idx_t_fwhm_left:idx_t_fwhm_right] = 1
-
-        tpa_threshold_value = (signal_wvd_tpa[idx_t_fwhm_left] + signal_wvd_tpa[idx_t_fwhm_right])/2
-
-        # plot the cross-section
-        f, axx = plt.subplots(1)
-        im = axx.plot(t_wvd_samples, signal_wvd_tpa)
-        axx.plot(t_wvd_samples, tpa_region_mask)
-        axx.legend(("{} ".format(100*tpa_thresh)),
-                   )
-        axx.set_ylabel('TPA signal, a.u.')
-        axx.set_title("Wigner-Ville distribution at TPA frequency")
-        plt.show()
-
-        # return the mask distribution
-        return tpa_region_mask, tpa_threshold_value
+        # return the support and the TPA threshold value
+        print("Threshold value of the WVD at TPA frequency is ", tpa_thresh)
+        return self.g2_support, tpa_thresh

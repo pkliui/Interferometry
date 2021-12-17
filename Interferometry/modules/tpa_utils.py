@@ -134,9 +134,57 @@ def tightly_thresholded_tpa_signal(tpa_signal_loose, max_idx, time_step, tpa_tol
     return tpa_signal_tight
 
 def tight_support_tpa(tpa_signal_tight):
+    """
+    Returns the tight support of the TPA signal
+    ---
+    Args:
+    ---
+    tpa_signal_tight: 2d ndarray
+        Tightly thresholded TPA signal
+    ---
+    Returns:
+    ---
+    tpa_support: 2d ndarray
+        Tight TPA support
+    """
     idx_left = np.where(tpa_signal_tight == 1)[0][0]
     idx_right = np.where(tpa_signal_tight == 1)[0][-1]
     tight_support = np.zeros(tpa_signal_tight.shape)
     tight_support[idx_left:idx_right+1] = 1
 
     return tight_support
+
+def tight_support_tpa_simulation(time_samples, pulse_duration, signal_wvd_tpa):
+    """
+    Returns the tight support of the simulated TPA signal and the corresponding threshold value
+    ---
+    Args:
+    ---
+    time_samples: numpy array
+        Time samples of the TPA signal
+    pulse_duration: float
+        Duration of the laser pulse
+    signal_wvd_tpa: numpy array
+        Wigner-Ville distribution of the TPA signal
+    ---
+    Returns:
+    ---
+    tight_support: 2d ndarray
+        Tight TPA support
+    tpa_thresh: float
+        TPA threshold
+    """
+    # get the indices of time samples within the FWHM of the laser pulse
+    idx_t_fwhm_left = np.where(np.abs(time_samples+pulse_duration/2) < abs(time_samples[1] - time_samples[0]))[0][0]
+    idx_t_fwhm_right = np.where(np.abs(time_samples-pulse_duration/2) < abs(time_samples[1] - time_samples[0]))[0][0]
+
+    # set the mask distribution to 1 within the FWHM of the laser pulse and to 0 elsewhere
+    # this is the region where the definition of the TPA is always valid
+    tight_support = np.zeros(signal_wvd_tpa.shape)
+    tight_support[idx_t_fwhm_left:idx_t_fwhm_right] = 1
+
+    # get the corresponding threshold value of the TPA signal
+    tpa_thresh = (signal_wvd_tpa[idx_t_fwhm_left] + signal_wvd_tpa[idx_t_fwhm_right])/2
+
+
+    return tight_support, tpa_thresh
