@@ -26,7 +26,34 @@ def plot_1dsignal(sampling_variable, signal, xlabel, ylabel):
     ax.grid()
     plt.show()
 
-def plot_two_1dsignals(sampling_variable_1, signal_1, xlabel_1, ylabel_1,
+
+def plot_multiple_1dsignals(sampling_variable, xlabel, ylabel, *kwargs):
+    """
+    Plots multiple samples of input 1d signals
+    ---
+    Args:
+    ---
+    sampling variable: 1d numpy array
+        Samples of the domain's variable (time, frequency, etc.)
+        the signal is represented in
+    xlabel: str
+        Label of the x axis
+    ylabel: str
+        Label of the y axis
+    *kwargs:
+        Samples of the signals to be plotted and their labels provided as tuples
+        (sampling_variable, label)
+    """
+    fig, ax = plt.subplots(1, figsize=(15, 5))
+    for ii in range(len(kwargs)):
+        ax.plot(sampling_variable, kwargs[ii][0], label=kwargs[ii][1])
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.legend()
+    ax.grid()
+    plt.show()
+
+def plot_subplots_1dsignals(sampling_variable_1, signal_1, xlabel_1, ylabel_1,
                       sampling_variable_2, signal_2, xlabel_2, ylabel_2):
     """
     Plots the samples of two input 1d signals
@@ -58,8 +85,6 @@ def plot_2dspectrogram(sampling_variable_1, label_1, sampling_variable_2, label_
     f, axx = plt.subplots(1)
     d1 = np.abs(sampling_variable_1[1] - sampling_variable_1[0])
     d2 = np.abs(sampling_variable_2[1] - sampling_variable_2[0])
-    print("signal min", signal.min())
-    print("signal max", signal.max())
     im = axx.imshow(signal,
                     interpolation=None, origin='lower', aspect="auto",
                     extent=(

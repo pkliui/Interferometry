@@ -41,7 +41,7 @@ def zoom_in_2d(signal, sampling_variable, zoom_in_value):
     signal: 2dndarray
         2d signal distribution
     sampling_variable: 1darray
-        sampling variable
+        sampling variable (e.g. frequency samples)
     zoom_in_value: float
         zoom in value, within the sampling_variable range
     ---
@@ -53,17 +53,16 @@ def zoom_in_2d(signal, sampling_variable, zoom_in_value):
         cropped sampling variable
     """
     if zoom_in_value is not None and zoom_in_value < sampling_variable[-1]:
-        print("zoom in value", zoom_in_value)
+        # compute the sampling step
         d_sampling_variable = np.abs(sampling_variable[1] - sampling_variable[0])
+        # get the index of the zoom in value
         cutoff_idx = int(len(sampling_variable)/2 - zoom_in_value / d_sampling_variable)
-        print("signal shape", signal.shape)
+        # zoom in to the signal and sampling variable
         signal_zoomed = np.copy(signal[cutoff_idx:-cutoff_idx, :])
-        print("signal zoomed shape", signal_zoomed.shape)
         sampling_variable_zoomed = np.copy(sampling_variable[cutoff_idx:-cutoff_idx])
     elif zoom_in_value is None:
         signal_zoomed = np.copy(signal)
         sampling_variable_zoomed = np.copy(sampling_variable)
-        print("keeping original size")
     else:
         raise ValueError('zoom_in_value cannot be larger than the max value of the sampling variable!')
     return signal_zoomed, sampling_variable_zoomed

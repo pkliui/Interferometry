@@ -199,6 +199,62 @@ class Simulation(BaseInterferometry):
         else:
             raise ValueError("self.tau_samples variable cannot be None")
 
+    def gen_complex_interferogram(self, field_ac_weight=0.5, interferometric_ac_weight=0.5, temp_shift=0, plotting=False):
+        """
+        Computes a weighted sum of the field autocorrelation and the interferometric autocorrelation
+        ---
+        Args:
+        ---
+        field_ac_weight: float, optional
+            Weight of the field autocorrelation in the final signal
+            Default is 0.5
+        interferometric_ac_weight: float, optional
+            Weight of the interferometric autocorrelation in the final signal
+            Default is 0.5
+        temp_shift: float, optional
+            Arbitrary temporal shift (e.g. to simulate non-centered experimental data),
+            in femtoseconds
+            Default is 0 fs
+        plotting: bool, optional
+            If True, displays a plot of the computed interferogram
+            Default is False
+        ---
+        Modifies:
+        ---
+        self.interferogram: 1D array of floats
+            Samples of the interferogram
+
+        """
+        if self.tau_samples is not None:
+            #
+            # iniitalise interferogram
+            self.interferogram = np.zeros(len(self.tau_samples))
+            print("ifgm shape ", self.interferogram.shape)
+            #
+            # initialise electric field and its envelope at delay = 0
+            e_t, a_t = self.gen_e_field(delay = 0)
+            print("field shape ", e_t.shape)
+            #
+            # compute the temporal shift in pixels
+            idx_temp_shift = int(temp_shift / self.tau_step)
+            #
+            # compute the interferogram values at different temporal delays (taking into account the temporal shift)
+            for idx, tau_sample in enumerate(self.tau_samples + self.tau_step * idx_temp_shift):
+                # compute the field and its envelope at current tau_sample delay + additional temporal delay
+                e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample)
+                # compute complex  interferogram trace composed of interferometric and field autocorrelations
+                self.interferogram[idx] =  interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) + \
+                                             field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
+
+            print(self.interferogram.shape)
+            if plotting:
+                fig, ax = plt.subplots(1, figsize=(15, 5))
+                ax.plot(self.tau_samples, self.interferogram)
+                ax.set_xlabel("Time, s")
+                plt.show()
+        else:
+            raise ValueError("self.tau_samples variable cannot be None")
+
     def normalize_interferogram_simulation(self, normalizing_width=10e-15, t_norm_start=None):
         """
         Normalizes interferogram simulation
@@ -356,6 +412,10 @@ class Simulation(BaseInterferometry):
         # plot the cross-section of the WVD
         signal_wvd, t_wvd_samples, f_wvd_samples = spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram,
                                                                                           None, plotting=False, vmin=vmin, vmax=vmax);
+        print("inter", self.interferogram.shape)
+        print("signal_wvd", signal_wvd.shape)
+        print("t_wvd", t_wvd_samples.shape)
+        print("f_wvd", f_wvd_samples.shape)
         # get indicies of the frequencies closest to the tpa_freq
         tpa_idx = np.where((abs(tpa_freq - self.freq) < abs(self.freq[1] - self.freq[0])))[0][0]
         tpa_idx_low = int(np.ceil(len(f_wvd_samples)/2 + tpa_idx*2)-3)
@@ -363,7 +423,7 @@ class Simulation(BaseInterferometry):
 
         # get the WVD at the TPA frequency (in the vicinity of the TPA frequency)
         signal_wvd_tpa = np.zeros(signal_wvd.shape)
-        signal_wvd_tpa[tpa_idx_low:tpa_idx_high, :] = np.copy(signal_wvd[tpa_idx_low:tpa_idx_high, :])
+        signal_wvd_tpa[tpa_idx_low:tpa_idx_high+1, :] = np.copy(signal_wvd[tpa_idx_low:tpa_idx_high+1, :])
 
         signal_wvd_tpa = signal_wvd_tpa.sum(axis=0)
         signal_wvd_tpa = signal_wvd_tpa / signal_wvd_tpa.max()
@@ -381,8 +441,8 @@ class Simulation(BaseInterferometry):
 
         # plot the cross-section
         f, axx = plt.subplots(1)
-        im = axx.plot(self.tau_samples, signal_wvd_tpa)
-        axx.plot(self.tau_samples,tpa_region_mask)
+        im = axx.plot(t_wvd_samples, signal_wvd_tpa)
+        axx.plot(t_wvd_samples, tpa_region_mask)
         axx.legend(("{} ".format(100*tpa_thresh)),
                    )
         axx.set_ylabel('TPA signal, a.u.')

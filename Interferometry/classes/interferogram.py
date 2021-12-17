@@ -209,7 +209,7 @@ class Interferogram(BaseInterferometry):
             xlabel = "Wavelength, {}".format(wav_units)
         #
         if plot_type == "both":
-            plots.plot_two_1dsignals(self.tau_samples, self.interferogram, "Time delay, {}".format(self.tau_units), "Signal interferogram, a.u.",
+            plots.plot_subplots_1dsignals(self.tau_samples, self.interferogram, "Time delay, {}".format(self.tau_units), "Signal interferogram, a.u.",
                                         ft_samples, ft_abs, xlabel, "FT amplitude, a.u.")
         elif plot_type == "fourier":
             plots.plot_1dsignal(ft_samples, ft_abs, xlabel, "Signal interferogram, a.u.")
@@ -238,7 +238,7 @@ class Interferogram(BaseInterferometry):
     def compute_wigner_ville_distribution(self, zoom_in_freq=None, plotting=False, vmin=0, vmax=0):
         spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram, zoom_in_freq,  plotting=plotting, vmin=vmin, vmax=vmax)
 
-    def compute_g2(self, filter_cutoff=30e12, filter_order=6, plotting=False):
+    def compute_g2(self, filter_cutoff=30e12, filter_order=6, apply_support=False, plotting=False):
         """
         Computes the second order correlation function from the experimental interferogram
         ---
@@ -249,6 +249,8 @@ class Interferogram(BaseInterferometry):
             Default is 30e12
         filter_order: int, optional
             The order of the filter, Default is 6
+        tpa_thresholding: bool, optional
+            If True, multiplies the g2 distribution by its support
         plotting: bool, optional
             If True, displays a plot of the computed g2
             Default is False
@@ -258,8 +260,14 @@ class Interferogram(BaseInterferometry):
         self.g2
         """
         if self.interferogram.any() and self.tau_step.any() is not None:
-            self.g2 = self.g2_support * g2_function.compute_g2(self.interferogram, self.tau_step, self.tau_samples,
-                                             filter_cutoff=filter_cutoff, filter_order=filter_order, plotting=plotting)[:-1]
+            self.g2 = g2_function.compute_g2(self.interferogram, self.tau_step, self.tau_samples,
+                                             filter_cutoff=filter_cutoff, filter_order=filter_order, plotting=False)
+            if apply_support:
+                self.g2 = self.g2 * self.g2_support
+            if plotting:
+                plots.plot_1dsignal(self.tau_samples, self.g2, "Time delay, {}".format(self.tau_units), "g2, a.u.")
+                plt.suptitle(self.filetoread[:-4])
+                plt.show()
         else:
             raise ValueError("Temporal delay sample and interferogram samples cannot be None!")
 
@@ -568,7 +576,7 @@ class Interferogram(BaseInterferometry):
                                      plotting=plotting)
         return g2_sg_window
 
-    def plot_cross_section_wvd(self, tpa_freq=3e8 / 440e-9, freq_window_size=3, tpa_thresh=0.5,
+    def get_g2_support(self, tpa_freq=3e8 / 440e-9, freq_window_size=3, tpa_thresh=0.5,
                                tpa_tolerance=2e-15, vmin=-550, vmax=550, plotting=True):
         """
         Plots the cross-section of the WVD
@@ -608,36 +616,13 @@ class Interferogram(BaseInterferometry):
         tpa_signal_loose, max_idx = tpa_utils.loosely_thresholded_tpa_signal(signal_wvd_tpa, tpa_thresh)
         # get the tight support of the TPA signal
         tpa_signal_tight = tpa_utils.tightly_thresholded_tpa_signal(tpa_signal_loose, max_idx, self.tau_step,
-                                                              tpa_tolerance=tpa_tolerance)
-
-        tight_support = tpa_utils.tight_support_tpa(tpa_signal_tight)
-
-        self.g2_support = tight_support
+                                                                    tpa_tolerance=tpa_tolerance)
+        self.g2_support = tpa_utils.tight_support_tpa(tpa_signal_tight)
 
         if plotting:
-            # pick only the fully connected central region of the mask
-            n = 0#700
-            m = len(signal_wvd_tpa) #1500
-
-            plt.figure(figsize=(18, 6))
-            plt.plot(self.tau_samples[n:m-1]*1e15, signal_wvd_tpa[n:m-1])
-            plt.show()
-
-            plt.figure(figsize=(18, 6))
-            plt.plot(self.tau_samples[n:m-1]*1e15, signal_wvd_tpa[n:m-1])
-            plt.plot(self.tau_samples[n:m-1]*1e15, tpa_signal_loose[n:m-1])
-            plt.plot(self.tau_samples[n:m-1]*1e15, tpa_signal_tight[n:m-1])
-            plt.show()
-
-            plt.figure(figsize=(18, 6))
-            plt.plot(self.tau_samples[n:m-1]*1e15, tight_support[n:m-1] * signal_wvd_tpa[n:m-1])
-            plt.show()
-
-            plt.figure(figsize=(18, 6))
-            plt.plot(self.tau_samples[n:m-1]*1e15, tight_support[n:m-1])
-            plt.show()
-
-            return self.g2_support
+            plots.plot_multiple_1dsignals(t_wvd_samples*1e15, "time, fs", "Intensity, a.u.",
+                                          (signal_wvd_tpa, "TPA signal"), (self.g2_support, "TPA support"))
+        return self.g2_support
 
     def plot_cross_section_stft(self, tpa_freq=3e8 / 440e-9, nperseg=2**5):
         """
