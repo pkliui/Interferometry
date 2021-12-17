@@ -127,7 +127,7 @@ class TestSimulationClass(unittest.TestCase):
                 np.sum(a_t ** 2 * np.conj(a_t_tau) ** 2 * np.exp(2 * 1j * 2 * np.pi * self.sim.freq0 * delay)))
         #
         # compute interferogram using gen_interferogram method
-        self.sim.gen_interferogram_simulation()
+        self.sim.gen_interferogram()
         # compare with analytic result
         self.assertTrue(np.array_equal(np.round(expected_interferogram), np.round(self.sim.interferogram)))
 
