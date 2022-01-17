@@ -5,7 +5,7 @@ from scipy.optimize import minimize
 
 from Interferometry.classes.base import BaseInterferometry
 from Interferometry.modules import filtering, fourier_transforms, g2_function, normalization, plots, sampling, \
-    spectrograms, utils, tpa_utils
+    spectrograms, utils, tpa_utils, minimization
 
 
 class Simulation(BaseInterferometry):
@@ -55,6 +55,12 @@ class Simulation(BaseInterferometry):
         g2: 1D array of floats
             Samples of the second-order correlation function,
             extracted from the simulated interferogram
+            Default: None
+        normalizing_width: float, optional
+            Width of the normalization window of the interferogram, s
+            Default: None
+        t_norm_start: float, optional
+            Start of the normalization window of the interferogram, s
             Default: None
         """
         super().__init__()
@@ -106,6 +112,9 @@ class Simulation(BaseInterferometry):
         self.g2_analytical = g2_analytical
         self.g2 = g2
         self.g2_support = None
+
+        self.normalizing_width = None
+        self.t_norm_start = None
         """g2 support"""
 
 
@@ -230,11 +239,11 @@ class Simulation(BaseInterferometry):
             #
             # iniitalise interferogram
             self.interferogram = np.zeros(len(self.tau_samples))
-            print("ifgm shape ", self.interferogram.shape)
+            #("ifgm shape ", self.interferogram.shape)
             #
             # initialise electric field and its envelope at delay = 0
             e_t, a_t = self.gen_e_field(delay = 0)
-            print("field shape ", e_t.shape)
+            #print("field shape ", e_t.shape)
             #
             # compute the temporal shift in pixels
             idx_temp_shift = int(temp_shift / self.tau_step)
@@ -244,8 +253,8 @@ class Simulation(BaseInterferometry):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample)
                 # compute complex  interferogram trace composed of interferometric and field autocorrelations
-                self.interferogram[idx] =  interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) + \
-                                             field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
+                self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) + \
+                                          field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
 
             print(self.interferogram.shape)
             if plotting:
@@ -256,18 +265,60 @@ class Simulation(BaseInterferometry):
         else:
             raise ValueError("self.tau_samples variable cannot be None")
 
+        return self.interferogram
+
+    def interferogram_objective_function(self, arguments):
+        """
+        Defines the difference between simulated and measured interferograms (by least-squares regression)
+        ---
+        Args:
+        ---
+        arguments: 1D array of floats
+            Arguments to be passed to the objective function
+            (samples of normalized measured signal, field autocorrelation weight, interferometric autocorrelation weight)
+        """
+        measured_signal, field_ac_weight, interferometric_ac_weight = arguments[0], arguments[1], arguments[2]
+        simulated_signal = self.gen_complex_interferogram(field_ac_weight=field_ac_weight, interferometric_ac_weight=interferometric_ac_weight,
+                                                     temp_shift=0, plotting=False)
+
+        # make sure both signals are normalized before computing the difference
+        simulated_signal= normalization.normalize(simulated_signal, self.tau_step, self._time_samples,
+                                                     normalizing_width=self.normalizing_width, t_norm_start=self.t_norm_start)
+
+
+        plt.plot(simulated_signal)
+        plt.show()
+
+        plt.plot(measured_signal)
+        plt.show()
+
+        obj_fun = np.sum((simulated_signal - measured_signal)**2)
+
+        return obj_fun
+
+    def find_best_mixture_of_interferograms(self, obj_fun, measured_signal):
+        # define the bounds for the cutoff frequency
+        bounds = [(0,15)]
+        res = minimize(lambda coeffs: obj_fun(measured_signal, *coeffs), x0=np.array([10, 10]), bounds=bounds,
+                       method='SLSQP', tol=1e-10, options={'disp': True})
+        #plt.plot(170e12*fc, self.objective_function(170e12*fc, filter_order=4), "+")
+        #plt.show()
+
+        return res
+
     def display_temporal_and_ft(self):
         plots.plot_subplots_1dsignals(self.tau_samples, self.interferogram, "time, fs", "intensity, a.u.",
                                       self.freq, np.abs(self.ft), "freq, Hz", "FT amplitude, a.u.")
 
-
-
-    def normalize_interferogram_simulation(self, normalizing_width=10e-15, t_norm_start=None):
+    def normalize_interferogram_simulation(self, normalizing_width=None, t_norm_start=None):
         """
-        Normalizes interferogram simulation
+        Normalizes interferogram simulation and sets the normalized interferogram as the interferogram attribute.
+        Sets the normalizing width and the time at which the normalization starts
         ---
         Args:
         ---
+        interferogram: 1D array of floats
+            Samples of the interferogram
         normalizing_width: float, optional
             the width of integration range to be used for normalization, in seconds
         t_norm_start: float, optional
@@ -278,9 +329,11 @@ class Simulation(BaseInterferometry):
         self.interferogram: 1D array of floats
             Samples of the normalized interferogram
         """
-        if t_norm_start is not None:
+        if normalizing_width is not None and t_norm_start is not None:
+            self.normalizing_width = normalizing_width
+            self.t_norm_start = t_norm_start
             self.interferogram = normalization.normalize(self.interferogram, self.tau_step, self._time_samples,
-                                                normalizing_width=normalizing_width, t_norm_start=t_norm_start)
+                                                normalizing_width=self.normalizing_width, t_norm_start=self.t_norm_start)
         else:
             raise ValueError("starting value start_at cannot be none! ")
 
