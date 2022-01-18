@@ -2,8 +2,11 @@
 
 Author: Pavel Kliuiev
 
+
 Affiliation: Quantum dynamics group
+
 Department of Applied Physics, Aalto University
+
 Tietotie 3, FI-02150 Espoo, Finland
 
 ```BaseInterferometry``` class is the base class that provides functionality for analysis of interferometric data.
