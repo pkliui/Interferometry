@@ -116,18 +116,63 @@ class TestSimulationClass(unittest.TestCase):
             #
             # generate electric field and its envelope at a current delay
             e_t_tau, a_t_tau = self.sim.gen_e_field(delay=delay)
-            #
-            # compute interferogram value at a current delay
-            expected_interferogram[idx] = np.sum(np.abs(a_t) ** 4) + \
-                                      np.sum(np.abs(a_t_tau) ** 4) + \
-                                      4 * np.sum(np.abs(a_t) ** 2 * np.abs(a_t_tau) ** 2) + \
+
+            #compute interferogram value at a current delay
+            expected_interferogram[idx] = np.sum(np.abs(a_t) ** 4 + np.abs(a_t_tau) ** 4 + \
+                                      4 * np.abs(a_t) ** 2 * np.abs(a_t_tau) ** 2) + \
                                       4 * np.sum((np.abs(a_t) ** 2 + np.abs(a_t_tau) ** 2) * np.real(
                 a_t * np.conj(a_t_tau) * np.exp(1j * 2 * np.pi * self.sim.freq0 * delay))) + \
                                       2 * np.real(
                 np.sum(a_t ** 2 * np.conj(a_t_tau) ** 2 * np.exp(2 * 1j * 2 * np.pi * self.sim.freq0 * delay)))
-        #
+
         # compute interferogram using gen_interferogram method
         self.sim.gen_interferogram()
         # compare with analytic result
         self.assertTrue(np.array_equal(np.round(expected_interferogram), np.round(self.sim.interferogram)))
 
+    def test_get_complex_interferogram(self):
+        """
+        test computing complex interferogram (a weighted sum of the field autocorrelation
+        and the interferometric autocorrelation) using its analytic expression
+        successful testing should also prove that the self.e_field and self.envelope variables are defined and computed correctly
+        :return:
+        """
+        self.sim = Simulation(lambd0=800e-9, t_fwhm=10e-15,
+                              t_start=-15e-15, t_end=15e-15, delta_t=0.01e-15,
+                              tau_start=0, tau_end=30e-15, tau_step=0.15e-15)
+        # initialise expected interferogram array
+        expected_interferogram = np.zeros(len(self.sim.tau_samples))
+
+        # initialise expected interferometric autocorrelation array
+        expected_interferometic_autocorr = np.zeros(len(self.sim.tau_samples))
+
+        # initialise expected  field autocorrelation array
+        expected_field_autocorr = np.zeros(len(self.sim.tau_samples))
+        #
+        # generate electric field and its envelope at delay=0
+        e_t, a_t = self.sim.gen_e_field(delay=0)
+        #
+        # compute expected interferogram by its analytic formula
+        for idx, delay in enumerate(self.sim.tau_samples):
+            #
+            # generate electric field and its envelope at a current delay
+            e_t_tau, a_t_tau = self.sim.gen_e_field(delay=delay)
+            #
+            # compute interferometric autocorrelation value at a current delay
+            expected_interferometic_autocorr[idx] = np.sum(np.abs(a_t) ** 4) + \
+                                          np.sum(np.abs(a_t_tau) ** 4) + \
+                                          4 * np.sum(np.abs(a_t) ** 2 * np.abs(a_t_tau) ** 2) + \
+                                          4 * np.sum((np.abs(a_t) ** 2 + np.abs(a_t_tau) ** 2) * np.real(
+                a_t * np.conj(a_t_tau) * np.exp(1j * 2 * np.pi * self.sim.freq0 * delay))) + \
+                                          2 * np.real(
+                np.sum(a_t ** 2 * np.conj(a_t_tau) ** 2 * np.exp(2 * 1j * 2 * np.pi * self.sim.freq0 * delay)))
+
+            # compute field autocorrelation value at a current delay
+            expected_field_autocorr[idx] = np.sum(np.abs(e_t + e_t_tau)**2)
+
+            expected_interferogram[idx] = 0.5 * expected_interferometic_autocorr[idx] + 0.5 * expected_field_autocorr[idx]
+
+        # compute interferogram using gen_complex_interferogram method
+        self.sim.gen_complex_interferogram(field_ac_weight=0.5, interferometric_ac_weight=0.5, temp_shift=0, plotting=False)
+        # compare with analytic result
+        self.assertTrue(np.array_equal(np.round(expected_interferogram), np.round(self.sim.interferogram)))
