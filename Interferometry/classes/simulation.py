@@ -197,6 +197,7 @@ class Simulation(BaseInterferometry):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample)
                 # compute the interferogram
+                #self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
                 self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
                 # interferogram with an additional field autocorrelation term
                 # self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau)**2)**2) + 2 * np.sum(np.abs(e_t + e_t_tau)**2)
@@ -265,62 +266,6 @@ class Simulation(BaseInterferometry):
 
         return self.interferogram
 
-    def fit_simulated_interferogram(self, measured_signal, field_ac_weight_max,
-                                    interferometric_ac_weight_max, temp_shift_max):
-        """
-        Defines the difference between simulated and measured interferograms (by least-squares regression)
-        ---
-        Args:
-        ---
-        arguments: 1D array of floats
-            Arguments to be passed to the objective function
-            (samples of normalized measured signal, field autocorrelation weight, interferometric autocorrelation weight)
-        measured_signal: 1D array of floats
-            Samples of the measured interferogram
-        field_ac_weight: float
-            Weight of the field autocorrelation in the final signal
-        interferometric_ac_weight: float
-            Weight of the interferometric autocorrelation in the final signal
-        temp_shift: float
-            Arbitrary temporal shift (e.g. to simulate non-centered experimental data)
-        ---
-        Returns:
-        ---
-        objective_function_value: float
-            Value of the objective function to be minimized later
-        """
-        objective_fun_values = []
-        field_ac_weights = []
-        interferometric_ac_weights = []
-        temp_shifts = []
-
-        for field_ac_weight in range(0, field_ac_weight_max):
-            #print("field ac ", field_ac_weight)
-
-            for interferometric_ac_weight in range(0, interferometric_ac_weight_max):
-                #print("int ac ", interferometric_ac_weight)
-
-                if field_ac_weight == 0 and interferometric_ac_weight == 0:
-                    pass
-                else:
-                    for temp_shift in range(-temp_shift_max, temp_shift_max, 1):
-                        #print("temp shift ", temp_shift)
-
-                        simulated_signal = self.gen_complex_interferogram(
-                            field_ac_weight=field_ac_weight,
-                            interferometric_ac_weight=interferometric_ac_weight,
-                            temp_shift=temp_shift,
-                            plotting=False)
-
-                        objective_fun_value = minimization.interferogram_objective_function(measured_signal, simulated_signal)
-
-                        objective_fun_values.append(objective_fun_value)
-                        field_ac_weights.append(field_ac_weight)
-                        interferometric_ac_weights.append(interferometric_ac_weight)
-                        temp_shifts.append(temp_shift)
-
-        plt.plot(objective_fun_values)
-        plt.show()
 
     def find_best_mixture_of_interferograms(self, obj_fun, measured_signal):
         # define the bounds for the cutoff frequency
