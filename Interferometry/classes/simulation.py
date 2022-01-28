@@ -197,10 +197,7 @@ class Simulation(BaseInterferometry):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample)
                 # compute the interferogram
-                #self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
                 self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
-                # interferogram with an additional field autocorrelation term
-                # self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau)**2)**2) + 2 * np.sum(np.abs(e_t + e_t_tau)**2)
 
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
@@ -240,11 +237,9 @@ class Simulation(BaseInterferometry):
             #
             # iniitalise interferogram
             self.interferogram = np.zeros(len(self.tau_samples))
-            #("ifgm shape ", self.interferogram.shape)
             #
             # initialise electric field and its envelope at delay = 0
             e_t, a_t = self.gen_e_field(delay=temp_shift)
-            #print("field shape ", e_t.shape)
             #
             # compute the temporal shift in pixels
             idx_temp_shift = int(temp_shift / self.tau_step)
@@ -265,7 +260,6 @@ class Simulation(BaseInterferometry):
             raise ValueError("self.tau_samples variable cannot be None")
 
         return self.interferogram
-
 
     def find_best_mixture_of_interferograms(self, obj_fun, measured_signal):
         # define the bounds for the cutoff frequency
