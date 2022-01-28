@@ -187,7 +187,7 @@ class Simulation(BaseInterferometry):
             self.interferogram = np.zeros(len(self.tau_samples))
             #
             # initialise electric field and its envelope at delay = 0
-            e_t, a_t = self.gen_e_field(delay = 0)
+            e_t, a_t = self.gen_e_field(delay=0)
             #
             # compute the temporal shift in pixels
             idx_temp_shift = int(temp_shift / self.tau_step)
@@ -242,7 +242,7 @@ class Simulation(BaseInterferometry):
             #("ifgm shape ", self.interferogram.shape)
             #
             # initialise electric field and its envelope at delay = 0
-            e_t, a_t = self.gen_e_field(delay = 0)
+            e_t, a_t = self.gen_e_field(delay=temp_shift)
             #print("field shape ", e_t.shape)
             #
             # compute the temporal shift in pixels
@@ -251,12 +251,10 @@ class Simulation(BaseInterferometry):
             # compute the interferogram values at different temporal delays (taking into account the temporal shift)
             for idx, tau_sample in enumerate(self.tau_samples + self.tau_step * idx_temp_shift):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
-                e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample)
+                e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample+temp_shift)
                 # compute complex  interferogram trace composed of interferometric and field autocorrelations
                 self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) + \
                                           field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
-
-            print(self.interferogram.shape)
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
                 ax.plot(self.tau_samples, self.interferogram)
@@ -267,7 +265,8 @@ class Simulation(BaseInterferometry):
 
         return self.interferogram
 
-    def interferogram_objective_function(self, arguments):
+    def fit_simulated_interferogram(self, measured_signal, field_ac_weight_max,
+                                    interferometric_ac_weight_max, temp_shift_max):
         """
         Defines the difference between simulated and measured interferograms (by least-squares regression)
         ---
@@ -276,25 +275,52 @@ class Simulation(BaseInterferometry):
         arguments: 1D array of floats
             Arguments to be passed to the objective function
             (samples of normalized measured signal, field autocorrelation weight, interferometric autocorrelation weight)
+        measured_signal: 1D array of floats
+            Samples of the measured interferogram
+        field_ac_weight: float
+            Weight of the field autocorrelation in the final signal
+        interferometric_ac_weight: float
+            Weight of the interferometric autocorrelation in the final signal
+        temp_shift: float
+            Arbitrary temporal shift (e.g. to simulate non-centered experimental data)
+        ---
+        Returns:
+        ---
+        objective_function_value: float
+            Value of the objective function to be minimized later
         """
-        measured_signal, field_ac_weight, interferometric_ac_weight = arguments[0], arguments[1], arguments[2]
-        simulated_signal = self.gen_complex_interferogram(field_ac_weight=field_ac_weight, interferometric_ac_weight=interferometric_ac_weight,
-                                                     temp_shift=0, plotting=False)
+        objective_fun_values = []
+        field_ac_weights = []
+        interferometric_ac_weights = []
+        temp_shifts = []
 
-        # make sure both signals are normalized before computing the difference
-        simulated_signal= normalization.normalize(simulated_signal, self.tau_step, self._time_samples,
-                                                     normalizing_width=self.normalizing_width, t_norm_start=self.t_norm_start)
+        for field_ac_weight in range(0, field_ac_weight_max):
+            #print("field ac ", field_ac_weight)
 
+            for interferometric_ac_weight in range(0, interferometric_ac_weight_max):
+                #print("int ac ", interferometric_ac_weight)
 
-        plt.plot(simulated_signal)
+                if field_ac_weight == 0 and interferometric_ac_weight == 0:
+                    pass
+                else:
+                    for temp_shift in range(-temp_shift_max, temp_shift_max, 1):
+                        #print("temp shift ", temp_shift)
+
+                        simulated_signal = self.gen_complex_interferogram(
+                            field_ac_weight=field_ac_weight,
+                            interferometric_ac_weight=interferometric_ac_weight,
+                            temp_shift=temp_shift,
+                            plotting=False)
+
+                        objective_fun_value = minimization.interferogram_objective_function(measured_signal, simulated_signal)
+
+                        objective_fun_values.append(objective_fun_value)
+                        field_ac_weights.append(field_ac_weight)
+                        interferometric_ac_weights.append(interferometric_ac_weight)
+                        temp_shifts.append(temp_shift)
+
+        plt.plot(objective_fun_values)
         plt.show()
-
-        plt.plot(measured_signal)
-        plt.show()
-
-        obj_fun = np.sum((simulated_signal - measured_signal)**2)
-
-        return obj_fun
 
     def find_best_mixture_of_interferograms(self, obj_fun, measured_signal):
         # define the bounds for the cutoff frequency
