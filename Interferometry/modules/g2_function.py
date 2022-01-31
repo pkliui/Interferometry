@@ -9,7 +9,7 @@ from Interferometry.modules.filtering import savitzky_golay_filter
 import itertools as it
 
 
-def compute_g2(signal_data, time_step, time_samples, filter_cutoff=30e12, filter_order=6, plotting=False):
+def compute_g2(signal_data, time_step, time_samples, filter_cutoff=15e12, filter_order=3, plotting=False):
     """
     Computes the second order correlation function
 
@@ -150,7 +150,46 @@ def g2_vs_savitsky_golay(signal_data, time_shannon, time_step, time_samples,
     signal_data: 1d ndarray
         Signal to be filtered
     time_shannon: 1d ndarray
-
+        Inverse of the Shannon's sampling rate (for the 2nd harmonic)
+    time_step: float
+        Temporal step of the signal_data
+    time_samples: 1d ndarray
+        Temporal samples of the signal_data
+    keep_shannon_sampling: bool, optional
+        If True, limits the max window size of the filter to the one set by the Shannon's sampling rate
+        Default is True
+    sg_window_min: int, optional
+        The minimum window size of the filter, in samples
+        Default is 1
+    sg_window_max: int, optional
+        The maximum window size of the filter, in samples
+        Default is 3
+    sg_window_step: int, optional
+        The step of the window size of the filter, in samples
+        Default is 2
+    sg_order_min: int, optional
+        The minimum order of the filter
+        Default is 1
+    sg_order_max: int, optional
+        The maximum order of the filter
+        Default is 6
+    sg_order_step: int, optional
+        The step of the order of the filter
+        Default is 1
+    bw_filter_order: int, optional
+        The order of the Butterworth filter
+        Default is 3
+    bw_filter_cutoff: float, optional
+        The cut-off frequency of the Butterworth filter
+        Default is 1e12
+    g2_min: float, optional
+        The minimum value of the g2 function to threshold its distribution at
+        Default is 0.95
+    g2_max: float, optional
+        The maximum value of the g2 function to threshold its distribution at
+        Default is 1.05
+    plotting: bool, optional
+        If True, plots the g2 function at each filter cutoff frequency
     """
     # if it is desired to keep the filter's window size below the Shannon's sampling time,
     # set the max window size to the Shannon's sampling time
