@@ -531,9 +531,18 @@ class Interferogram(BaseInterferometry):
         else:
             raise ValueError("Parameter cannot be None!")
 
-    def display_temporal_and_ft_batch(self, vs_wavelength=True, wav_min=None, wav_max=None, wav_units=None):
+    def display_temporal_and_ft_batch(self, vs_wavelength=True, plot_type="both", wav_min=None, wav_max=None, wav_units=None):
         """
         Plots all interferograms  contained in a given directory in temporal and frequency domains
+        ---
+        Args:
+        ---
+        vs_wavelength: bool, if True, the Fourier domain will be plotted vs wavelength,
+        otherwise it will be plotted vs frequency
+        plot_type: str, either "both", "temporal" or "frequency"
+        wav_min: float, minimum wavelength to plot if vs_wavelength is True
+        wav_max: float, maximum wavelength to plot if vs_wavelength is True
+        wav_units: str, units of wavelength if vs_wavelength is True
         """
         for f in glob.glob(os.path.join(self.pathtodata, "*.txt")):
             base_name = os.path.basename(f)
@@ -542,7 +551,7 @@ class Interferogram(BaseInterferometry):
             # read interferograms and plot data
             ifgm = Interferogram(pathtodata=self.pathtodata, filetoread=base_name, tau_units=self.tau_units)
             ifgm.read_data()
-            ifgm.display_temporal_and_ft(vs_wavelength=vs_wavelength, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
+            ifgm.display_temporal_and_ft(vs_wavelength=vs_wavelength, plot_type=plot_type, wav_min=wav_min, wav_max=wav_max, wav_units=wav_units)
 
     def apply_savitzky_golay_filter(self, window_size_shannon=1, window_size_pxls=None,  order=2):
         """
@@ -569,6 +578,55 @@ class Interferogram(BaseInterferometry):
                                  bw_filter_order=3, bw_filter_cutoff=1e12,
                                  g2_min=0.95, g2_max=1.05,
                                  plotting=True):
+        """
+        Computes the second-order correlation function as a function of the filter's cut-off frequency
+        ---
+        Args:
+        ---
+        signal_data: 1d ndarray
+            Signal to be filtered
+        time_shannon: 1d ndarray
+            Inverse of the Shannon's sampling rate (for the 2nd harmonic)
+        time_step: float
+            Temporal step of the signal_data
+        time_samples: 1d ndarray
+            Temporal samples of the signal_data
+        keep_shannon_sampling: bool, optional
+            If True, limits the max window size of the filter to the one set by the Shannon's sampling rate
+            Default is True
+        sg_window_min: int, optional
+            The minimum window size of the filter, in samples
+            Default is 1
+        sg_window_max: int, optional
+            The maximum window size of the filter, in samples
+            Default is 3
+        sg_window_step: int, optional
+            The step of the window size of the filter, in samples
+            Default is 2
+        sg_order_min: int, optional
+            The minimum order of the filter
+            Default is 1
+        sg_order_max: int, optional
+            The maximum order of the filter
+            Default is 6
+        sg_order_step: int, optional
+            The step of the order of the filter
+            Default is 1
+        bw_filter_order: int, optional
+            The order of the Butterworth filter
+            Default is 3
+        bw_filter_cutoff: float, optional
+            The cut-off frequency of the Butterworth filter
+            Default is 1e12
+        g2_min: float, optional
+            The minimum value of the g2 function to threshold its distribution at
+            Default is 0.95
+        g2_max: float, optional
+            The maximum value of the g2 function to threshold its distribution at
+            Default is 1.05
+        plotting: bool, optional
+            If True, plots the g2 function at each filter cutoff frequency
+        """
 
         g2_sg_window = g2_function.g2_vs_savitsky_golay(self.interferogram, self.tau_shannon, self.tau_step, self.tau_samples,
                                                         keep_shannon_sampling=keep_shannon_sampling,
