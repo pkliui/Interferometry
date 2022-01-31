@@ -2,6 +2,7 @@
 This module contains auxiliary functions for the Interferogram class
 """
 
+import numpy as np
 
 def sort_list_of_tuples(list_of_tuples, sort_by_idx=0, reverse=False):
     """
@@ -59,3 +60,18 @@ def get_minmax_indices(wav, wav_min, wav_max, units):
     # make sure that they are sorted: wav_min_idx < wav_max_idx
     wav_min_idx, wav_max_idx = sorted([wav_min_idx, wav_max_idx], reverse=False)
     return wav_min_idx, wav_max_idx
+
+def random_noise(mu, sigma, number_of_samples):
+    """
+    Random noise sequence of length equal to number_of_samples
+    ---
+    Parameters
+    ---
+    mu: float
+        Mean of the normal distribution
+    sigma: float
+        Standard deviation of the normal distribution
+    number_of_samples: int
+        Number of samples to generate
+    """
+    return np.random.normal(mu, sigma, number_of_samples)
