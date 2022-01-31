@@ -226,6 +226,9 @@ class Simulation(BaseInterferometry):
         plotting: bool, optional
             If True, displays a plot of the computed interferogram
             Default is False
+        add_noise: bool, optional
+            If True, adds Gaussian noise to the final signal
+            Default is False
         ---
         Modifies:
         ---
@@ -260,6 +263,16 @@ class Simulation(BaseInterferometry):
             raise ValueError("self.tau_samples variable cannot be None")
 
         return self.interferogram
+
+    def add_noise_to_interferogram(self, mu, sigma):
+        """
+        Adds Gaussian noise to the interferogram
+        :param mu:
+        :param sigma:
+        :return:
+        """
+        # add noise
+        self.interferogram += utils.random_noise(mu, sigma, self.interferogram.shape[0])
 
     def find_best_mixture_of_interferograms(self, obj_fun, measured_signal):
         # define the bounds for the cutoff frequency
@@ -362,7 +375,7 @@ class Simulation(BaseInterferometry):
         """
         if (self.interferogram is not None) and (self.tau_step is not None):
             # compute the g2
-            self.g2 = self.compute_g2(self.interferogram, self.tau_step, filter_cutoff=filter_cutoff, filter_order=filter_order)
+            self.g2 = g2_function.compute_g2(self.interferogram, self.tau_step, self.tau_samples, filter_cutoff=filter_cutoff, filter_order=filter_order)
         else:
             raise ValueError("Temporal delay sample and interferogram samples cannot be None!")
         #
@@ -419,7 +432,7 @@ class Simulation(BaseInterferometry):
         g2_vs_freq: 2d ndarray
             The second order correlation function as a function of the filter's cut-off frequency
         """
-        g2_vs_cutoff = self.compute_g2_vs_cutoff(self.interferogram, self.tau_samples, self.tau_step,
+        g2_vs_cutoff = g2_function.g2_vs_lowpass_cutoff(self.interferogram, self.tau_samples, self.tau_step,
                                     cutoff_min=cutoff_min, cutoff_max=cutoff_max, cutoff_step=cutoff_step,
                                     order_min=order_min, order_max=order_max, order_step=order_step,
                                     g2_min=g2_min, g2_max=g2_max, to_plot=to_plot)
@@ -433,6 +446,17 @@ class Simulation(BaseInterferometry):
                                plotting=True):
         """
         Plots the cross-section of the WVD
+        ---
+        Args:
+        ---
+        tpa_freq: float, optional
+            The frequency of the TPA, in Hz
+            Default is 3e8 / 440e-9
+        freq_window_size: int
+            The distance between the frequency of interest and the closest indicies we are looking for, in pixels
+            Default is 3
+        vmin: float, optional
+
         """
         #
         # get the cross-section of the WVD
