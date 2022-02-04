@@ -39,8 +39,9 @@ def compute_g2(signal_data, time_step, time_samples, filter_cutoff=15e12, filter
     # low-pass filter the input signal_data
     #
     signal_filtered = low_pass_filter(signal_data, time_step, filter_cutoff=filter_cutoff, filter_order=filter_order)
-    # Subtract the background and divide by 2 to get the correlation function
-    g2 = (signal_filtered - 1) / 2
+    g2_infinity = signal_filtered[int(0.9*len(signal_filtered)):]
+    g2_infinity_mean = np.mean(g2_infinity)
+    g2 = signal_filtered / g2_infinity_mean
     #
     if plotting:
         fig, ax = plt.subplots(1, figsize=(15, 5))
