@@ -116,12 +116,13 @@ class Simulation(BaseInterferometry):
         self.normalizing_width = None
         self.t_norm_start = None
         """g2 support"""
+        self.tau_shannon = 1 / (2 * (3e8 / self.lambd0) * 2)
+        """Shannon's sampling time"""
 
 
     def gen_e_field(self, delay=0, plotting=False):
         """
         Computes the electric field of a Gaussian laser pulse given its parameters
-
         ---
         Args:
         ---
@@ -135,7 +136,7 @@ class Simulation(BaseInterferometry):
         ---
         Returns:
         ---
-        e_field: 1D array of floats
+        self.e_field: 1D array of floats
             Samples of electric field
         envelope: 1D array of floats
             Samples of the pulse envelope
@@ -160,10 +161,9 @@ class Simulation(BaseInterferometry):
             raise ValueError("Check input variables, they cannot be None")
         return e_field, envelope
 
-    def gen_interferogram(self, temp_shift=0, plotting=False):
+    def gen_interferogram(self, temp_shift=0, add_noise=False, noise_percentage=0.05, plotting=False):
         """
         Computes an interferometric autocorrelation (an interferogram)
-
         ---
         Args:
         ---
@@ -171,6 +171,12 @@ class Simulation(BaseInterferometry):
             Arbitrary temporal shift (e.g. to simulate non-centered experimental data),
             in femtoseconds
             Default is 0 fs
+        add_noise: bool, optional
+            If True, adds noise to the interferogram
+            Default is False
+        noise_percentage: float, optional
+            Percentage of noise to add to the interferogram (as a fraction of the maximum value)
+            Default is 0.05 (5%)
         plotting: bool, optional
             If True, displays a plot of the computed interferogram
             Default is False
@@ -187,7 +193,7 @@ class Simulation(BaseInterferometry):
             self.interferogram = np.zeros(len(self.tau_samples))
             #
             # initialise electric field and its envelope at delay = 0
-            e_t, a_t = self.gen_e_field(delay=0)
+            e_field, a_t = self.gen_e_field(delay=0)
             #
             # compute the temporal shift in pixels
             idx_temp_shift = int(temp_shift / self.tau_step)
@@ -197,7 +203,11 @@ class Simulation(BaseInterferometry):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample)
                 # compute the interferogram
-                self.interferogram[idx] = np.sum(np.abs((e_t + e_t_tau) ** 2) ** 2)
+                self.interferogram[idx] = np.sum(np.abs((e_field + e_t_tau) ** 2) ** 2)
+
+            # add noise to the interferogram
+            if add_noise:
+                self.add_noise_to_interferogram(noise_percentage)
 
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
@@ -207,7 +217,7 @@ class Simulation(BaseInterferometry):
         else:
             raise ValueError("self.tau_samples variable cannot be None")
 
-    def gen_complex_interferogram(self, field_ac_weight=0.5, interferometric_ac_weight=0.5, temp_shift=0, plotting=False):
+    def gen_complex_interferogram(self, field_ac_weight=0.5, interferometric_ac_weight=0.5, temp_shift=0, add_noise=False, noise_percentage=0.15, plotting=False):
         """
         Computes a weighted sum of the field autocorrelation and the interferometric autocorrelation
         ---
@@ -229,6 +239,9 @@ class Simulation(BaseInterferometry):
         add_noise: bool, optional
             If True, adds Gaussian noise to the final signal
             Default is False
+        noise_percentage: float, optional
+            Percentage of the signal to be added as noise (as a fraction of the signal amplitude)
+            Default is 0.15 (15%)
         ---
         Modifies:
         ---
@@ -242,7 +255,7 @@ class Simulation(BaseInterferometry):
             self.interferogram = np.zeros(len(self.tau_samples))
             #
             # initialise electric field and its envelope at delay = 0
-            e_t, a_t = self.gen_e_field(delay=temp_shift)
+            e_field, a_t = self.gen_e_field(delay=temp_shift)
             #
             # compute the temporal shift in pixels
             idx_temp_shift = int(temp_shift / self.tau_step)
@@ -252,8 +265,12 @@ class Simulation(BaseInterferometry):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample+temp_shift)
                 # compute complex  interferogram trace composed of interferometric and field autocorrelations
-                self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) + \
-                                          field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
+                self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_field + e_t_tau)**2)**2) + \
+                                          field_ac_weight * np.sum(np.abs(e_field + e_t_tau)**2)
+            # add noise to the interferogram
+            if add_noise:
+                self.add_noise_to_interferogram(noise_percentage)
+
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
                 ax.plot(self.tau_samples, self.interferogram)
@@ -264,15 +281,24 @@ class Simulation(BaseInterferometry):
 
         return self.interferogram
 
-    def add_noise_to_interferogram(self, mu, sigma):
+    def add_noise_to_interferogram(self, percentage):
         """
         Adds Gaussian noise to the interferogram
-        :param mu:
-        :param sigma:
-        :return:
+        ---
+        Args:
+        ---
+        amplitude: float
+            Amplitude of the noise
+        mu: float
+            Mean of the Gaussian noise
+        sigma: float
+            Standard deviation of the Gaussian noise
         """
         # add noise
-        self.interferogram += utils.random_noise(mu, sigma, self.interferogram.shape[0])
+        if percentage is not None:
+            self.interferogram += percentage * np.random.normal(0, self.interferogram.std(), self.interferogram.size)
+        else:
+            raise ValueError("percentage variable cannot be None")
 
     def find_best_mixture_of_interferograms(self, obj_fun, measured_signal):
         # define the bounds for the cutoff frequency
@@ -288,32 +314,36 @@ class Simulation(BaseInterferometry):
         plots.plot_subplots_1dsignals(self.tau_samples, self.interferogram, "time, fs", "intensity, a.u.",
                                       self.freq, np.abs(self.ft), "freq, Hz", "FT amplitude, a.u.")
 
-    def normalize_interferogram_simulation(self, normalizing_width=None, t_norm_start=None):
+    def gen_normalized_interferogram(self, temp_shift=0, add_noise=False, noise_percentage=0.05, plotting=False):
         """
-        Normalizes interferogram simulation and sets the normalized interferogram as the interferogram attribute.
-        Sets the normalizing width and the time at which the normalization starts
-        ---
-        Args:
-        ---
-        interferogram: 1D array of floats
-            Samples of the interferogram
-        normalizing_width: float, optional
-            the width of integration range to be used for normalization, in seconds
-        t_norm_start: float, optional
-            the start time of the integration range to be used for normalization, in seconds
+        Normalizes interferogram simulation by its one-arm intensity distribution of the E-field
+        and sets the normalized interferogram as the interferogram attribute.
         ---
         Modifies:
         ---
         self.interferogram: 1D array of floats
             Samples of the normalized interferogram
         """
-        if normalizing_width is not None and t_norm_start is not None:
-            self.normalizing_width = normalizing_width
-            self.t_norm_start = t_norm_start
-            self.interferogram = normalization.normalize(self.interferogram, self.tau_step, self._time_samples,
-                                                normalizing_width=self.normalizing_width, t_norm_start=self.t_norm_start)
-        else:
-            raise ValueError("starting value start_at cannot be none! ")
+        self.gen_interferogram(temp_shift=temp_shift, add_noise=add_noise, noise_percentage=noise_percentage, plotting=plotting)
+        e_field, _ = self.gen_e_field(delay=0)
+        self.interferogram = normalization.normalize(self.interferogram, 2*np.sum(np.abs(e_field)**4))
+
+    def gen_normalized_complex_interferogram(self, field_ac_weight=10, interferometric_ac_weight=1, temp_shift=0, plotting=True):
+        """
+        Normalizes interferogram simulation by its one-arm intensity distribution of the E-field
+        and sets the normalized interferogram as the interferogram attribute.
+        ---
+        Modifies:
+        ---
+        self.interferogram: 1D array of floats
+            Samples of the normalized interferogram
+        """
+        self.gen_complex_interferogram(field_ac_weight=field_ac_weight,
+                                       interferometric_ac_weight=interferometric_ac_weight,
+                                       temp_shift=temp_shift,
+                                       plotting=plotting)
+        e_field, _ = self.gen_e_field(delay=0)
+        self.interferogram = normalization.normalize(self.interferogram, 2*np.sum(np.abs(e_field)**4))
 
     def gen_g2_analytical(self, plotting=False):
         """
@@ -346,7 +376,6 @@ class Simulation(BaseInterferometry):
             self.g2_analytical[idx] = np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau) / np.mean((e_t * np.conj(e_t))**2))
             #self.g2_analytical[idx] = np.real(np.mean(e_t * np.conj(e_t) * e_t_tau * np.conj(e_t_tau)) / np.mean((e_t * np.conj(e_t))**2))
 
-    #
         if plotting:
             fig, ax = plt.subplots(1, figsize=(15, 5))
             ax.plot(self.tau_samples, self.g2_analytical)
@@ -478,3 +507,22 @@ class Simulation(BaseInterferometry):
         # return the support and the TPA threshold value
         print("Threshold value of the WVD at TPA frequency is ", tpa_thresh)
         return self.g2_support, tpa_thresh
+
+    def apply_savitzky_golay_filter(self, window_size_shannon=1, window_size_pxls=None,  order=2):
+        """
+        Apply a Savitzky-Golay filter to the interferogram
+        ---
+        Args:
+        ---
+        window_size_shannon: float, optional
+            The window size of the Savitzky-Golay filter, relative to the Shannon's sampling interval
+            Default is 1
+        window_size_pxls: int, optional
+            The window size of the Savitzky-Golay filter, in pixels
+            Default is None
+        order: int, optional
+            The order of the Savitzky-Golay filter
+            Default is 2
+        """
+        self.interferogram = filtering.savitzky_golay_filter(self.interferogram, self.tau_shannon, self.tau_step,
+                                                             window_size_shannon=window_size_shannon, window_size_pxls=window_size_pxls, order=order)
