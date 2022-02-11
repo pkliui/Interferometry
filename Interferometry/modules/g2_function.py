@@ -9,7 +9,7 @@ from Interferometry.modules.filtering import savitzky_golay_filter
 import itertools as it
 
 
-def compute_g2(signal_data, time_step, time_samples, filter_cutoff=15e12, filter_order=3, plotting=False):
+def compute_g2(signal_data, time_step, filter_cutoff=15e12, filter_order=3):
     """
     Computes the second order correlation function
 
@@ -20,15 +20,10 @@ def compute_g2(signal_data, time_step, time_samples, filter_cutoff=15e12, filter
         timer series to filter
     time_step: float
         temporal step the signal_data was recorded at
-    time_samples: 1d ndarray
-        time samples of the signal_data
     filter_cutoff: float, optional
         the cutoff frequency of the filter, in Hz
     filter_order: int, optional
         the order of the filter
-    plotting: bool, optional
-        whether to plot the g2 function
-        Default: True
     ---
     Returns:
     ---
@@ -36,28 +31,18 @@ def compute_g2(signal_data, time_step, time_samples, filter_cutoff=15e12, filter
         Second order correlation function
     """
     #
-    # low-pass filter the input signal_data
-    #
+    # low-pass filter the interferogram
     signal_filtered = low_pass_filter(signal_data, time_step, filter_cutoff=filter_cutoff, filter_order=filter_order)
-    g2_infinity = signal_filtered[int(0.9*len(signal_filtered)):]
-    g2_infinity_mean = np.mean(g2_infinity)
-    g2 = signal_filtered / g2_infinity_mean
-    #
-    if plotting:
-        fig, ax = plt.subplots(1, figsize=(15, 5))
-        ax.plot(time_samples, g2)
-        ax.set_xlabel("Time, s")
-        plt.title("g2")
-        plt.grid()
-        plt.show()
-
+    # compute the g2 function
+    g2 = (signal_filtered - 1)*0.5
     return g2
 
 def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
                          cutoff_min=1e12, cutoff_max=30e12, cutoff_step=1e12,
                          order_min=1, order_max=6, order_step=1,
                          g2_min=0.95, g2_max=1.05,
-                         to_plot=True):
+                         cbar_min=0, cbar_max=1,
+                         plotting=True):
     """
     Computes the second-order correlation function as a function of the filter's cut-off frequency
     ---
@@ -90,7 +75,13 @@ def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
     g2_max: float, optional
         Pixel values of the computed g2 that exceed g2_max are set to -1
         Default is 1.05
-    to_plot: bool, optional
+    cbar_min: float, optional
+        Minimum value of the colorbar
+        Default is 0
+    cbar_max: float, optional
+        Maximum value of the colorbar
+        Default is 1
+    plotting: bool, optional
         If True, the g2 distribution is plotted
     ---
     Returns:
@@ -110,7 +101,7 @@ def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
         g2_vs_freq = []
         # loop over the filter cutoff frequencies
         for fc in filter_cutoff_range:
-            g2 = compute_g2(signal_data, time_step, time_samples, filter_cutoff=fc, filter_order=fo, plotting=False)
+            g2 = compute_g2(signal_data, time_step, filter_cutoff=fc, filter_order=fo)
             #
             # threshold from below and append
             # if max g2 value is below the minimum, set all values of g2 to -1
@@ -122,10 +113,10 @@ def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
         g2_vs_freq[g2_vs_freq > g2_max] = -1
         #
         #plot
-        if to_plot:
+        if plotting:
             fig, ax = plt.subplots(1, figsize=(15, 5))
             plt.imshow(g2_vs_freq, aspect='auto', origin='lower',
-                       cmap=plt.get_cmap("viridis"), vmin=0, vmax=1,
+                       cmap=plt.get_cmap("viridis"), vmin=cbar_min, vmax=cbar_max,
                        extent=(min(time_samples), max(time_samples),
                                min(filter_cutoff_range), max(filter_cutoff_range)))
             plt.title("g2 function, filter order = {}".format(fo))
