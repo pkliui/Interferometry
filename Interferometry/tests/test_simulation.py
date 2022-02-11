@@ -125,6 +125,8 @@ class TestSimulationClass(unittest.TestCase):
                                       2 * np.real(
                 np.sum(a_t ** 2 * np.conj(a_t_tau) ** 2 * np.exp(2 * 1j * 2 * np.pi * self.sim.freq0 * delay)))
 
+        # normalize
+        expected_interferogram = expected_interferogram / (2*np.sum(np.abs(e_t)**4))
         # compute interferogram using gen_interferogram method
         self.sim.gen_interferogram()
         # compare with analytic result
@@ -170,7 +172,7 @@ class TestSimulationClass(unittest.TestCase):
             # compute field autocorrelation value at a current delay
             expected_field_autocorr[idx] = np.sum(np.abs(e_t + e_t_tau)**2)
 
-            expected_interferogram[idx] = 0.5 * expected_interferometic_autocorr[idx] + 0.5 * expected_field_autocorr[idx]
+            expected_interferogram[idx] = 0.5 * expected_interferometic_autocorr[idx]/ (2*np.sum(np.abs(e_t)**4))  + 0.5 * expected_field_autocorr[idx] / (2*np.sum(np.abs(e_t)**2))
 
         # compute interferogram using gen_complex_interferogram method
         self.sim.gen_complex_interferogram(field_ac_weight=0.5, interferometric_ac_weight=0.5, temp_shift=0, plotting=False)

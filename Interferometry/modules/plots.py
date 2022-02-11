@@ -54,7 +54,7 @@ def plot_multiple_1dsignals(sampling_variable, xlabel, ylabel, *kwargs):
     plt.show()
 
 def plot_subplots_1dsignals(sampling_variable_1, signal_1, xlabel_1, ylabel_1,
-                      sampling_variable_2, signal_2, xlabel_2, ylabel_2):
+                      sampling_variable_2, signal_2, xlabel_2, ylabel_2, title=None):
     """
     Plots the samples of two input 1d signals
     ---
@@ -72,7 +72,8 @@ def plot_subplots_1dsignals(sampling_variable_1, signal_1, xlabel_1, ylabel_1,
         Samples of signal 2
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5), constrained_layout=True)
-    ax1.plot(sampling_variable_1, signal_1,)
+    plt.suptitle(title)
+    ax1.plot(sampling_variable_1, signal_1)
     ax1.set_xlabel(xlabel_1)
     ax1.set_ylabel(ylabel_1)
     ax1.grid()
@@ -80,6 +81,7 @@ def plot_subplots_1dsignals(sampling_variable_1, signal_1, xlabel_1, ylabel_1,
     ax2.set_xlabel(xlabel_2)
     ax2.set_ylabel(ylabel_2)
     ax2.grid()
+
 
 def plot_2dspectrogram(sampling_variable_1, label_1, sampling_variable_2, label_2, signal, title, vmin, vmax):
     f, axx = plt.subplots(1)
