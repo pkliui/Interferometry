@@ -13,7 +13,7 @@ class Simulation(BaseInterferometry):
     """
     class for simulating 1D interferometric data
     """
-    def __init__(self, lambd0=800e-9, t_fwhm0=100e-15, gvd=0e-30,  t_tpa=10e-15, t_phase=0, t_start=-200e-15, t_end=200e-15, delta_t=0.15e-15,
+    def __init__(self, lambd0=800e-9, t_fwhm0=100e-15, gvd=0e-30,  t_tpa=None, t_phase=0, t_start=-200e-15, t_end=200e-15, delta_t=0.15e-15,
                  tau_start=0, tau_end=100e-15, tau_step=0.15e-15, interferogram=None, g2_analytical=None, g2=None, freq=None, ft=None):
         """
         Initializes the class to simulate interferometric data
@@ -32,7 +32,7 @@ class Simulation(BaseInterferometry):
             Default: 0e-30
         t_tpa: float, optional
             Temporal width of the TPA region, s
-            Default: 10e-15
+            Default: None
         t_phase: float, optional
             Phase of a Gaussian envelope
             Default: 0
@@ -80,7 +80,6 @@ class Simulation(BaseInterferometry):
         self.t_fwhm = self.t_fwhm0 * np.sqrt(1 + (8 * self.gvd * np.log(2) / self.t_fwhm0**2)**2)
         """float: FWHM pulse duration, non-zero-valued GVD """
 
-        self.t_tpa = t_tpa
         self.t_phase = t_phase
         self._t_start = t_start
         self._t_end = t_end
@@ -117,10 +116,12 @@ class Simulation(BaseInterferometry):
         self.freq = freq
         self.ft = ft
         # compute the Fourier transform and the frequency samples if they are None
-        if self.freq is None and self.ft is None and \
-                self.interferogram is not None and self.tau_step is not None and self.tau_samples is not None:
-            #print("ft in progress ")
-            self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
+        if self.freq is None and self.ft is None:
+            if self.interferogram is not None and self.tau_step is not None and self.tau_samples is not None:
+                #print("ft in progress ")
+                self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
+            else:
+                raise ValueError("Cannot compute Fourier transform without interferogram and tau_step and tau_samples")
 
         self.g2_analytical = g2_analytical
         self.g2 = g2
@@ -131,6 +132,17 @@ class Simulation(BaseInterferometry):
         """g2 support"""
         self.tau_shannon = 1 / (2 * (3e8 / self.lambd0) * 2)
         """Shannon's sampling time"""
+
+        self.t_tpa = t_tpa
+        if self.t_tpa is None:
+            self.t_tpa = 0.5 * self.tau_step * len(self.tau_samples)
+        if self.tau_samples is not None and self.tau_step is not None:
+            self.idx_low_tpa = int(0.5 * len(self.tau_samples) - self.t_tpa / self.tau_step)
+            """Lower boundary index of the TPA region"""
+            self.idx_high_tpa = int(0.5 * len(self.tau_samples) + self.t_tpa / self.tau_step)
+            """High boundary index of the TPA region"""
+        else:
+            raise ValueError("tau_samples and tau_step must be defined")
 
 
     def gen_e_field(self, delay=0, plotting=False):
@@ -297,12 +309,8 @@ class Simulation(BaseInterferometry):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample+temp_shift)
                 #
-                # find the indices outside of the TPA region
-                idx_low_tpa = int(0.5 * len(self.tau_samples) - self.t_tpa / self.tau_step)
-                idx_high_tpa = int(0.5 * len(self.tau_samples) + self.t_tpa / self.tau_step)
-                #
                 # compute complex interferogram trace composed of interferometric and field autocorrelations
-                if idx<idx_low_tpa or idx>idx_high_tpa:
+                if idx<self.idx_low_tpa or idx>self.idx_high_tpa:
                     # no interferometric autocorrelation outside of the TPA region
                     self.interferogram[idx] = field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
                 else:
@@ -311,12 +319,16 @@ class Simulation(BaseInterferometry):
 
                 if normalize:
                     # compute complex interferogram trace composed of interferometric and field autocorrelations
-                    if idx<idx_low_tpa or idx>idx_high_tpa:
+                    if idx<self.idx_low_tpa or idx>self.idx_high_tpa:
                         # no interferometric autocorrelation outside of the TPA region
-                        self.interferogram[idx] = field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2) / (2*np.sum(np.abs(e_t)**2))
+                        self.interferogram[idx] /= (2*np.sum(np.abs(e_t)**2))
                     else:
                         self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) / (2*np.sum(np.abs(e_t)**4))+ \
                                                   field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2) / (2*np.sum(np.abs(e_t)**2))
+            print(self.idx_low_tpa, self.idx_high_tpa)
+            plt.plot(self.t_tpa)
+            plt.show()
+
             # add noise to the interferogram
             if add_noise:
                 self.add_noise_to_interferogram(noise_percentage)
