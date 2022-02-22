@@ -13,7 +13,7 @@ class Simulation(BaseInterferometry):
     """
     class for simulating 1D interferometric data
     """
-    def __init__(self, lambd0=800e-9, t_fwhm=100e-15, t_phase=0, t_start=-200e-15, t_end=200e-15, delta_t=0.15e-15,
+    def __init__(self, lambd0=800e-9, t_fwhm0=100e-15, gvd=0e-30,  t_tpa=10e-15, t_phase=0, t_start=-200e-15, t_end=200e-15, delta_t=0.15e-15,
                  tau_start=0, tau_end=100e-15, tau_step=0.15e-15, interferogram=None, g2_analytical=None, g2=None, freq=None, ft=None):
         """
         Initializes the class to simulate interferometric data
@@ -24,9 +24,15 @@ class Simulation(BaseInterferometry):
         lambd: float, optional
             Wavelegth of light, m
             Default: 800e-9
-        t_fwhm: float, optional
+        t_fwhm0: float, optional
             Pulse duration, full width at half maximum definition, s
             Default: 100e-15
+        gvd: float, optional
+            Group velocity dispersion, fs^2
+            Default: 0e-30
+        t_tpa: float, optional
+            Temporal width of the TPA region, s
+            Default: 10e-15
         t_phase: float, optional
             Phase of a Gaussian envelope
             Default: 0
@@ -69,9 +75,13 @@ class Simulation(BaseInterferometry):
         self.freq0 = 1 / (lambd0 / 3e8)
         """float: Frequency of the fundamental signal"""
 
-        self.t_fwhm = t_fwhm
-        self.t_phase = t_phase
+        self.t_fwhm0 = t_fwhm0
+        self.gvd = gvd
+        self.t_fwhm = self.t_fwhm0 * np.sqrt(1 + (8 * self.gvd * np.log(2) / self.t_fwhm0**2)**2)
+        """float: FWHM pulse duration, non-zero-valued GVD """
 
+        self.t_tpa = t_tpa
+        self.t_phase = t_phase
         self._t_start = t_start
         self._t_end = t_end
         self._delta_t = delta_t
@@ -149,8 +159,14 @@ class Simulation(BaseInterferometry):
         if all(x is not None for x in [self._time_samples, self.t_fwhm, self.t_phase, self.freq0]):
             #
             # compute the envelope of a Gaussian pulse
-            envelope = np.exp(-4 * np.log(2) * (self._time_samples - delay)**2 / self.t_fwhm**2) \
+            envelope = np.exp(-np.sqrt(4 * np.log(2)) * (self._time_samples - delay)**2 / self.t_fwhm**2) \
                             * np.exp(1j * self.t_phase * (self._time_samples - delay)**2)
+            #
+            # compute the electric field of the sech2-shaped pulse
+            #t_over_tau = -4 * np.log(2) * (self._time_samples - delay)**2 / self.t_fwhm**2
+            #envelope = 2 / (np.exp(t_over_tau) + np.exp(-t_over_tau)) \
+            #           * np.exp(1j * self.t_phase * (self._time_samples - delay)**2)
+            #envelope = np.sech()**2
             # compute the electric field of a Gaussian pulse
             e_field = envelope * np.exp(-1j * 2 * np.pi * self.freq0 * (self._time_samples - delay))
             #
@@ -167,6 +183,7 @@ class Simulation(BaseInterferometry):
     def gen_interferogram(self, temp_shift=0, add_noise=False, noise_percentage=0.05, normalize=True, plotting=False):
         """
         Computes an interferometric autocorrelation (an interferogram)
+        Does not take into account the TPA region
         ---
         Args:
         ---
@@ -217,6 +234,8 @@ class Simulation(BaseInterferometry):
             # add noise to the interferogram
             if add_noise:
                 self.add_noise_to_interferogram(noise_percentage)
+            # update FT
+            self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
 
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
@@ -230,6 +249,7 @@ class Simulation(BaseInterferometry):
     def gen_complex_interferogram(self, field_ac_weight=0.5, interferometric_ac_weight=0.5, temp_shift=0, add_noise=False, noise_percentage=0.15, normalize=True, plotting=False):
         """
         Computes a weighted sum of the field autocorrelation and the interferometric autocorrelation
+        Sets the interferometric autocorrelation to zero  outside of the TPA region
         ---
         Args:
         ---
@@ -276,16 +296,32 @@ class Simulation(BaseInterferometry):
             for idx, tau_sample in enumerate(self.tau_samples + self.tau_step * idx_temp_shift):
                 # compute the field and its envelope at current tau_sample delay + additional temporal delay
                 e_t_tau, a_t_tau = self.gen_e_field(delay=tau_sample+temp_shift)
-                # compute complex  interferogram trace composed of interferometric and field autocorrelations
-                self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) + \
-                                          field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
+                #
+                # find the indices outside of the TPA region
+                idx_low_tpa = int(0.5 * len(self.tau_samples) - self.t_tpa / self.tau_step)
+                idx_high_tpa = int(0.5 * len(self.tau_samples) + self.t_tpa / self.tau_step)
+                #
+                # compute complex interferogram trace composed of interferometric and field autocorrelations
+                if idx<idx_low_tpa or idx>idx_high_tpa:
+                    # no interferometric autocorrelation outside of the TPA region
+                    self.interferogram[idx] = field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
+                else:
+                    self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) + \
+                    field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2)
+
                 if normalize:
-                    # and its normnalized version
-                    self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) / (2*np.sum(np.abs(e_t)**4)) + \
-                                               field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2) / (2*np.sum(np.abs(e_t)**2))
+                    # compute complex interferogram trace composed of interferometric and field autocorrelations
+                    if idx<idx_low_tpa or idx>idx_high_tpa:
+                        # no interferometric autocorrelation outside of the TPA region
+                        self.interferogram[idx] = field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2) / (2*np.sum(np.abs(e_t)**2))
+                    else:
+                        self.interferogram[idx] = interferometric_ac_weight * np.sum(np.abs((e_t + e_t_tau)**2)**2) / (2*np.sum(np.abs(e_t)**4))+ \
+                                                  field_ac_weight * np.sum(np.abs(e_t + e_t_tau)**2) / (2*np.sum(np.abs(e_t)**2))
             # add noise to the interferogram
             if add_noise:
                 self.add_noise_to_interferogram(noise_percentage)
+            #update FT
+            self.ft, self.freq = fourier_transforms.ft_data(self.interferogram, self.tau_step, self.tau_samples)
 
             if plotting:
                 fig, ax = plt.subplots(1, figsize=(15, 5))
@@ -340,9 +376,11 @@ class Simulation(BaseInterferometry):
 
         return res
 
-    def display_temporal_and_ft(self, title=None):
+    def display_temporal_and_ft(self, ft_cutoff_freq=None, title=None):
+
         plots.plot_subplots_1dsignals(self.tau_samples, self.interferogram, "time, fs", "Normalized interferogram intensity, a.u.",
-                                      self.freq, np.abs(self.ft), "freq, Hz", "FT amplitude, a.u.", title=title)
+                                      self.freq, np.abs(self.ft), "freq, Hz", "FT amplitude, a.u.",
+                                      signal2_cutoff_arg=ft_cutoff_freq, title=title)
 
     def gen_g2_analytical(self, plotting=False):
         """
@@ -503,6 +541,24 @@ class Simulation(BaseInterferometry):
                                     g2_min=g2_min, g2_max=g2_max, cbar_min=cbar_min, cbar_max=cbar_max, plotting=plotting)
 
         return g2_vs_cutoff
+
+    def compute_stft_spectrogram(self, nperseg=2**6, plotting=False, zoom_in_freq=None, **kwargs):
+        """
+        Computes and displays simulated spectrogram by short time Fourier transform
+        ---
+        Parameters
+        ---
+        nperseg: int, optional
+            window size of the STFT
+        plotting: bool, opional
+            If True, generates a plot of the spectrogram
+            Default: False
+        zoom_in_freq: float, optional
+            If not None, the spectrogram is zoomed in to the specified frequency range
+            Default: None
+        """
+        spectrograms.stft_spectrogram(self.interferogram, self.tau_step, zoom_in_freq, nperseg=nperseg, plotting=plotting)
+
 
     def compute_wigner_ville_distribution(self, zoom_in_freq=None, plotting=False, vmin=0, vmax=0):
         spectrograms.wigner_ville_distribution(self.tau_samples, self.interferogram, zoom_in_freq,  plotting=plotting, vmin=vmin, vmax=vmax)
