@@ -6,12 +6,11 @@ import tftb
 from matplotlib import pyplot as plt
 from scipy.signal import stft, hilbert, detrend
 from scipy.signal.windows import gaussian
-
-
 from Interferometry.modules import plots, sampling
 
 
-def stft_spectrogram(signal, time_step, zoom_in_freq, nperseg=2**6, plotting=False):
+def stft_spectrogram(signal, time_step, zoom_in_freq, nperseg=2**6, plotting=False,
+                     save_figure=False, pathtosave=None, save_name=None):
     """
     Compute a spectrogram of a time-series signal by short time Fourier transform (STFT)
     ---
@@ -25,10 +24,19 @@ def stft_spectrogram(signal, time_step, zoom_in_freq, nperseg=2**6, plotting=Fal
     zoom_in_freq: float, optional
         frequency value to zoom in at, Hz
     nperseg: int, optional
-        window size of the STFT
+        window size of the STFT in pixels
     plotting: bool, optional
         If True, generates a plot of the spectrogram
         Default: False
+    save_figure: bool, optional
+        If True, saves the figure to a file
+        Default: False
+    pathtosave: str, optional
+        Path to save the figure to
+        Default: None
+    save_name: str, optional
+        Name of the file to save the figure to
+        Default: None
     ---
     Returns:
     ---
@@ -52,11 +60,14 @@ def stft_spectrogram(signal, time_step, zoom_in_freq, nperseg=2**6, plotting=Fal
     signal_stft, f_stft_samples = sampling.zoom_in_2d(signal_stft, f_stft_samples, zoom_in_freq)
     #
     if plotting:
-        plots.plot_2dspectrogram(f_stft_samples, 'frequency, Hz', t_stft_samples, "time, s", np.abs(signal_stft), 'spectrogram - amplitude of STFT',
-                                 vmin=np.abs(signal_stft).min(), vmax=np.abs(signal_stft).max())
+        plots.plot_2dspectrogram(f_stft_samples, 'frequency, Hz', t_stft_samples, "time, s", np.abs(signal_stft),
+                                 vmin=np.abs(signal_stft).min(), vmax=np.abs(signal_stft).max(),
+                                 save_figure=save_figure, pathtosave=pathtosave, save_name=save_name)
+
     return signal_stft, t_stft_samples, f_stft_samples
 
-def wigner_ville_distribution(time_samples, signal_data, zoom_in_freq, plotting=False, vmin=0, vmax=0):
+def wigner_ville_distribution(time_samples, signal_data, zoom_in_freq, plotting=False, vmin=0, vmax=0,
+                              save_figure=False, pathtosave=None, save_name=None):
     """
     Compute Wigner-Ville distribution (time-frequency representation) of a time-series signal_data
     ---
@@ -77,6 +88,15 @@ def wigner_ville_distribution(time_samples, signal_data, zoom_in_freq, plotting=
     vmax: float, optional
         Maximum value of the colorbar
         Default: 0
+    save_figure: bool, optional
+        If True, saves the figure to a file
+        Default: False
+    pathtosave: str, optional
+        Path to save the figure to
+        Default: None
+    save_name: str, optional
+        Name of the file to save the figure to
+        Default: None
     ---
     Returns:
     ---
@@ -108,7 +128,8 @@ def wigner_ville_distribution(time_samples, signal_data, zoom_in_freq, plotting=
         # crop the signal to the frequency range of interest
         signal_wvd, f_wvd_samples = sampling.zoom_in_2d(signal_wvd, f_wvd_samples, zoom_in_freq)
         if plotting:
-            plots.plot_2dspectrogram(f_wvd_samples, 'frequency, Hz', t_wvd_samples, "time, s", signal_wvd, 'spectrogram - amplitude of WVD', vmin=vmin, vmax=vmax)
+            plots.plot_2dspectrogram(f_wvd_samples, 'frequency, Hz', t_wvd_samples, "time, s", signal_wvd, vmin, vmax,
+                                     save_figure, pathtosave, save_name)
     else:
         raise ValueError("Time_samples and signal_data must have the same length!")
     return signal_wvd, t_wvd_samples, f_wvd_samples
