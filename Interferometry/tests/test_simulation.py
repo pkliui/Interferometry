@@ -102,7 +102,7 @@ class TestSimulationClass(unittest.TestCase):
         successful testing should also prove that the self.e_field and self.envelope variables are defined and computed correctly
         :return:
         """
-        self.sim = Simulation(lambd0=800e-9, t_fwhm=10e-15,
+        self.sim = Simulation(lambd0=800e-9, t_fwhm0=10e-15, gvd=0e-30,  t_tpa0=0e-15,
                               t_start=-15e-15, t_end=15e-15, delta_t=0.01e-15,
                               tau_start=0, tau_end=30e-15, tau_step=0.15e-15)
         # initialise expected interferogram array
@@ -139,9 +139,9 @@ class TestSimulationClass(unittest.TestCase):
         successful testing should also prove that the self.e_field and self.envelope variables are defined and computed correctly
         :return:
         """
-        self.sim = Simulation(lambd0=800e-9, t_fwhm=10e-15,
+        self.sim = Simulation(lambd0=800e-9, t_fwhm0=10e-15, gvd=0e-30,  t_tpa0=30e-15,
                               t_start=-15e-15, t_end=15e-15, delta_t=0.01e-15,
-                              tau_start=0, tau_end=30e-15, tau_step=0.15e-15)
+                              tau_start=-15e-15, tau_end=15e-15, tau_step=0.15e-15)
         # initialise expected interferogram array
         expected_interferogram = np.zeros(len(self.sim.tau_samples))
 
