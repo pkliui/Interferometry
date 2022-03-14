@@ -115,7 +115,6 @@ def tightly_thresholded_tpa_signal(tpa_signal_loose, max_idx, time_step, tpa_tol
     #
     # explore the left and then the right side of the TPA signal
     for i in it.chain(range(max_idx-1, 0, -1), range(max_idx+1, len(tpa_signal_tight))):
-        #print("i", i)
         # if we are below the tpa_tolerance, reassign the pixel values from loose mask to tight mask
         if tpa_signal_loose[i] == 1 and tpa_subregions_distance < tpa_tolerance:
             tpa_signal_tight[i] = 1
@@ -163,7 +162,7 @@ def tight_support_tpa_simulation(time_samples, pulse_duration, signal_wvd_tpa):
     time_samples: numpy array
         Time samples of the TPA signal
     pulse_duration: float
-        Duration of the laser pulse
+        Duration of the laser pulse or the respective temporal width of the TPA region
     signal_wvd_tpa: numpy array
         Wigner-Ville distribution of the TPA signal
     ---
