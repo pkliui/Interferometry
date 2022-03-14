@@ -7,6 +7,8 @@ from scipy.signal import butter, filtfilt
 from Interferometry.modules.filtering import low_pass_filter
 from Interferometry.modules.filtering import savitzky_golay_filter
 import itertools as it
+import os
+import matplotlib.backends.backend_pdf
 
 
 def compute_g2(signal_data, time_step, filter_cutoff=15e12, filter_order=3):
@@ -39,10 +41,11 @@ def compute_g2(signal_data, time_step, filter_cutoff=15e12, filter_order=3):
 
 def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
                          cutoff_min=1e12, cutoff_max=30e12, cutoff_step=1e12,
-                         order_min=1, order_max=6, order_step=1,
+                         filter_order=3,
                          g2_min=0.95, g2_max=1.05,
                          cbar_min=0, cbar_max=1,
-                         plotting=True):
+                         plotting=True, title=None,
+                         ax_num=None):
     """
     Computes the second-order correlation function as a function of the filter's cut-off frequency
     ---
@@ -63,12 +66,9 @@ def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
     cutoff_step: float, optional
         The step of the cutoff frequency of the filter, in Hz
         Default is 1e12
-    order_min: int, optional
-        The minimum order of the filter, Default is 1
-    order_max: int, optional
-        The maximum order of the filter, Default is 6
-    order_step: int, optional
-        The step of the order of the filter, Default is 1
+    filter_order: int, optional
+        The order of the filter
+        Default is 3
     g2_min: float, optional
         If the maximum value of the computed g2 is below this value, the whole g2 distribution is set to -1
         Default is 0.95
@@ -83,6 +83,13 @@ def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
         Default is 1
     plotting: bool, optional
         If True, the g2 distribution is plotted
+        Default is True
+    title: str, optional
+        Title of the plot
+        Default is None
+    ax_num: int, optional
+        The number of the axis to plot on
+        Default is None
     ---
     Returns:
     ---
@@ -92,40 +99,47 @@ def g2_vs_lowpass_cutoff(signal_data, time_samples, time_step,
     #
     # range of cutoff frequencies to test
     filter_cutoff_range = np.linspace(cutoff_min, cutoff_max, int(abs(cutoff_max - cutoff_min)/cutoff_step))
-    # range of orders to test
-    filter_order = np.linspace(order_min, order_max, 1 + int(abs(order_max - order_min)/order_step))
     #
-    for fo in filter_order:
+    # initialise a list to keep g2 at each filter cutoff frequency
+    g2_vs_freq = []
+    #
+    # loop over the filter cutoff frequencies
+    for fc in filter_cutoff_range:
+        g2 = compute_g2(signal_data, time_step, filter_cutoff=fc, filter_order=filter_order)
         #
-        # initialise a list to keep g2 at each filter cutoff frequency
-        g2_vs_freq = []
-        # loop over the filter cutoff frequencies
-        for fc in filter_cutoff_range:
-            g2 = compute_g2(signal_data, time_step, filter_cutoff=fc, filter_order=fo)
-            #
-            # threshold from below and append
-            # if max g2 value is below the minimum, set all values of g2 to -1
-            g2[g2.max() < g2_min] = -1
-            g2_vs_freq.append(g2)
-        g2_vs_freq = np.array(g2_vs_freq)
-        # threshold from above
-        # set g2 at time delays where the maximum value of g2 is above g2_max to -1
-        g2_vs_freq[g2_vs_freq > g2_max] = -1
-        #
-        #plot
-        if plotting:
-            fig, ax = plt.subplots(1, figsize=(15, 5))
-            plt.imshow(g2_vs_freq, aspect='auto', origin='lower',
-                       cmap=plt.get_cmap("viridis"), vmin=cbar_min, vmax=cbar_max,
-                       extent=(min(time_samples), max(time_samples),
-                               min(filter_cutoff_range), max(filter_cutoff_range)))
-            plt.title("g2 function, filter order = {}".format(fo))
-            ax.set_xlabel("Time, s")
-            ax.set_ylabel("Cut-off frequency, Hz")
-            plt.colorbar()
-            plt.show()
-
-    return g2_vs_freq
+        # threshold from below and append
+        # if max g2 value is below the minimum, set all values of g2 to -1
+        g2[g2.max() < g2_min] = -1
+        g2_vs_freq.append(g2)
+    g2_vs_freq = np.array(g2_vs_freq)
+    #
+    # threshold from above
+    # set g2 at time delays where the maximum value of g2 is above 5 % of the max g2_max to -1
+    g2_vs_freq[g2_vs_freq > g2_max] = -1
+    #
+    # set the max colorbar value to the max value of the g2 function
+    cbar_max = (g2_vs_freq).max()
+    #
+    # get the average value of the g2 across the range of frequencies
+    idx_thresholded = np.where(g2_vs_freq!=-1)[0]
+    g2_average = np.sum(g2_vs_freq[idx_thresholded, :], axis=0)/len(idx_thresholded)
+    #
+    #plot
+    if plotting:
+        if ax_num is None:
+            fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+            ax_num = ax
+        im = ax_num.imshow(g2_vs_freq, aspect='auto', origin='upper',
+                   cmap=plt.get_cmap("viridis"), vmin=cbar_min, vmax=cbar_max,
+                   extent=(min(time_samples), max(time_samples),
+                           cutoff_max, cutoff_min))
+        ax_num.set_xlabel("Temporal delay, s")
+        ax_num.set_ylabel("Cut-off freq., Hz")
+        if title is not None:
+            ax_num.set_title(title)
+    else:
+        im = None
+    return g2_vs_freq, g2_average, im
 
 def g2_vs_savitsky_golay(signal_data, time_shannon, time_step, time_samples,
                                  keep_shannon_sampling=True,
