@@ -38,5 +38,5 @@ The software was tested using the following versions of the packages:
 GNU General Public License v3.0
 
 ## Documentation
-   
-For a user guide see the documentation under /Interferometry/docs/InterferogramAnalysis.ipynb
+
+For a user guide see [online documentation](https://github.com/pkliui/Interferometry/blob/master/Interferometry/docs/InterferogramAnalysis.md)
